@@ -6,9 +6,8 @@ import (
 )
 
 type Client struct {
-	baseURL string
-	apiKey  string
-	http    *http.Client
+	cfg        Config
+	httpClient *http.Client
 }
 
 // NewClient creates a new Pelican API client.
@@ -22,9 +21,8 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 
 	client := &Client{
-		baseURL: cfg.BaseURL,
-		apiKey:  cfg.APIKey,
-		http:    httpClient,
+		cfg:        cfg,
+		httpClient: httpClient,
 	}
 
 	return client, nil
