@@ -5,6 +5,6 @@ import "time"
 type Inventory struct {
 	GeneratedAt time.Time
 
-	Servers []Server
+	Servers []MinecraftServer
 	Routes  []Route
 }

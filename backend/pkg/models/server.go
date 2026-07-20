@@ -1,18 +1,13 @@
 package models
 
-type Server struct {
-	ID         string
+type MinecraftServer struct {
+	ID         int
 	UUID       string
-	Name       string
 	Identifier string
-
-	Type ServerType
-
-	Hostname string
-
-	Suspended bool
-
-	NodeID int
-
-	Metadata map[string]string
+	Name       string
+	NodeID     int
+	EggID      int
+	Allocation int
+	Suspended  bool
+	Status     *string
 }

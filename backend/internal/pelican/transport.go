@@ -25,17 +25,16 @@ type ServerResource struct {
 
 type ServerAttributes struct {
 	ID          int     `json:"id"`
+	ExternalID  *string `json:"external_id"`
 	UUID        string  `json:"uuid"`
 	Identifier  string  `json:"identifier"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Status      *string `json:"status"`
+	Suspended   bool    `json:"suspended"`
 
-	Suspended bool `json:"suspended"`
-
-	Node int `json:"node"`
-	Egg  int `json:"egg"`
-
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	User       int `json:"user"`
+	Node       int `json:"node"`
+	Allocation int `json:"allocation"`
+	Egg        int `json:"egg"`
 }
