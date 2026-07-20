@@ -1,15 +1,23 @@
 server:
-  address: ":8080"
+  host: "0.0.0.0"
+  port: 8080
 
 pelican:
-  url:
-  api_key:
+  url: ""
+  api_key: ""
+  timeout: 15s
 
-minecraft:
-  domain:
+discovery:
+  interval: 30s
+
+router:
+  backend: "infrared"
+  domain: ""
 
 infrared:
-  config:
+  config_path: "/etc/infrared/config.json"
+  reload_signal: "SIGHUP"
 
-sync:
-  interval: 30s
+logging:
+  level: "info"
+  format: "json"
