@@ -1,13 +1,13 @@
 package models
 
 type MinecraftServer struct {
-	ID           int
-	UUID         string
-	Identifier   string
-	Name         string
-	NodeID       int
-	EggID        int
-	AllocationID int
-	Suspended    bool
-	Status       *string
+	ID           int     `json:"id"`
+	UUID         string  `json:"uuid"`
+	Identifier   string  `json:"identifier"`
+	Name         string  `json:"name"`
+	NodeID       int     `json:"node_id"`
+	EggID        int     `json:"egg_id"`
+	AllocationID int     `json:"allocation_id"`
+	Suspended    bool    `json:"suspended"`
+	Status       *string `json:"status"`
 }
