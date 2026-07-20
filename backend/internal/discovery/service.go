@@ -11,6 +11,10 @@ import (
 type PelicanClient interface {
 	ListServers(context.Context) ([]pelican.ServerResource, error)
 	ListEggs(context.Context) ([]pelican.EggResource, error)
+	ListNodeAllocations(
+		context.Context,
+		int,
+	) ([]pelican.AllocationResource, error)
 }
 
 type Service struct {
@@ -42,6 +46,33 @@ func (s *Service) Discover(
 		eggsByID[egg.Attributes.ID] = egg
 	}
 
+	allocationLookup := make(map[int]pelican.AllocationAttributes)
+	processedNodes := make(map[int]struct{})
+
+	for _, server := range servers {
+		nodeID := server.Attributes.Node
+
+		if _, ok := processedNodes[nodeID]; ok {
+			continue
+		}
+
+		allocations, err := s.client.ListNodeAllocations(ctx, nodeID)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"list allocations for node %d: %w",
+				nodeID,
+				err,
+			)
+		}
+
+		for _, allocation := range allocations {
+			allocationLookup[allocation.Attributes.ID] =
+				allocation.Attributes
+		}
+
+		processedNodes[nodeID] = struct{}{}
+	}
+
 	discovered := make([]models.MinecraftServer, 0)
 
 	for _, server := range servers {
@@ -54,7 +85,21 @@ func (s *Service) Discover(
 			continue
 		}
 
-		discovered = append(discovered, mapMinecraftServer(server))
+		allocation, found :=
+			allocationLookup[server.Attributes.Allocation]
+		if !found {
+			return nil, fmt.Errorf(
+				"allocation %d not found for server %q",
+				server.Attributes.Allocation,
+				server.Attributes.Name,
+			)
+		}
+
+		minecraftServer := mapMinecraftServer(server)
+		minecraftServer.BackendIP = allocation.IP
+		minecraftServer.BackendPort = allocation.Port
+
+		discovered = append(discovered, minecraftServer)
 	}
 
 	return discovered, nil
