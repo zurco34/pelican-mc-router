@@ -1,20 +1,41 @@
 package app
 
 import (
+	"fmt"
+	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/zurco34/pelican-mc-router/internal/http"
+	api "github.com/zurco34/pelican-mc-router/internal/http"
+	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
 func Run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+
+	address := serverAddress(cfg.Server)
 
 	router := api.NewRouter()
 
 	log.Info().
-		Str("address", ":8080").
-		Msg("Starting HTTP server")
+		Str("address", address).
+		Msg("starting HTTP server")
 
-	return http.ListenAndServe(":8080", router)
+	if err := http.ListenAndServe(address, router); err != nil {
+		return fmt.Errorf("serve HTTP: %w", err)
+	}
+
+	return nil
+}
+
+func serverAddress(cfg config.ServerConfig) string {
+	return net.JoinHostPort(
+		cfg.Host,
+		strconv.Itoa(cfg.Port),
+	)
 }
