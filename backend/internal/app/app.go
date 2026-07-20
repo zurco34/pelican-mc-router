@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/zurco34/pelican-mc-router/internal/api"
+	"github.com/zurco34/pelican-mc-router/internal/http"
 )
 
 func Run() error {
