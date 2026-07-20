@@ -1,8 +1,21 @@
 package pelican
 
 type ListResponse[T any] struct {
-	Object string `json:"object"`
-	Data   []T    `json:"data"`
+	Object string       `json:"object"`
+	Data   []T          `json:"data"`
+	Meta   ResponseMeta `json:"meta"`
+}
+
+type ResponseMeta struct {
+	Pagination Pagination `json:"pagination"`
+}
+
+type Pagination struct {
+	Total       int `json:"total"`
+	Count       int `json:"count"`
+	PerPage     int `json:"per_page"`
+	CurrentPage int `json:"current_page"`
+	TotalPages  int `json:"total_pages"`
 }
 
 type ServerResource struct {

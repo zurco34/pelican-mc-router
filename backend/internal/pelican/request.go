@@ -1,9 +1,17 @@
 package pelican
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
 )
+
+const userAgent = "pelican-mc-router"
 
 func (c *Client) do(
 	ctx context.Context,
@@ -12,18 +20,98 @@ func (c *Client) do(
 	body any,
 	out any,
 ) error {
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		method,
-		c.cfg.BaseURL+path,
-		nil,
-	)
+	endpoint, err := c.buildURL(path)
 	if err != nil {
 		return err
 	}
 
-	_ = req
+	var requestBody io.Reader
+
+	if body != nil {
+		var buffer bytes.Buffer
+
+		if err := json.NewEncoder(&buffer).Encode(body); err != nil {
+			return fmt.Errorf("pelican: encode request body: %w", err)
+		}
+
+		requestBody = &buffer
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		method,
+		endpoint,
+		requestBody,
+	)
+	if err != nil {
+		return fmt.Errorf("pelican: create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+	req.Header.Set("User-Agent", userAgent)
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("pelican: execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK ||
+		resp.StatusCode >= http.StatusMultipleChoices {
+		return responseError(resp.StatusCode)
+	}
+
+	if out == nil || resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("pelican: decode response: %w", err)
+	}
 
 	return nil
+}
+
+func (c *Client) buildURL(path string) (string, error) {
+	baseURL, err := url.Parse(c.cfg.BaseURL + "/")
+	if err != nil {
+		return "", fmt.Errorf("pelican: parse base URL: %w", err)
+	}
+
+	relativeURL, err := url.Parse(strings.TrimPrefix(path, "/"))
+	if err != nil {
+		return "", fmt.Errorf("pelican: parse request path: %w", err)
+	}
+
+	return baseURL.ResolveReference(relativeURL).String(), nil
+}
+
+func responseError(statusCode int) error {
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf(
+			"%w: HTTP status %d",
+			ErrUnauthorized,
+			statusCode,
+		)
+
+	case http.StatusNotFound:
+		return fmt.Errorf(
+			"%w: HTTP status %d",
+			ErrNotFound,
+			statusCode,
+		)
+
+	default:
+		return fmt.Errorf(
+			"%w: HTTP status %d",
+			ErrUnexpected,
+			statusCode,
+		)
+	}
 }

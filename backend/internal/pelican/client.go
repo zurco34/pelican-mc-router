@@ -1,29 +1,51 @@
 package pelican
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
+
+const defaultTimeout = 30 * time.Second
 
 type Client struct {
 	cfg        Config
 	httpClient *http.Client
 }
 
-// NewClient creates a new Pelican API client.
+// NewClient creates a new Pelican Application API client.
 func NewClient(cfg Config) (*Client, error) {
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+	cfg.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
+
+	parsedURL, err := url.ParseRequestURI(cfg.BaseURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidBaseURL, cfg.BaseURL)
 	}
 
-	if cfg.Timeout > 0 {
-		httpClient.Timeout = cfg.Timeout
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, fmt.Errorf(
+			"%w: unsupported scheme %q",
+			ErrInvalidBaseURL,
+			parsedURL.Scheme,
+		)
 	}
 
-	client := &Client{
-		cfg:        cfg,
-		httpClient: httpClient,
+	if cfg.APIKey == "" {
+		return nil, ErrMissingAPIKey
 	}
 
-	return client, nil
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+
+	return &Client{
+		cfg: cfg,
+		httpClient: &http.Client{
+			Timeout: timeout,
+		},
+	}, nil
 }
