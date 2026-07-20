@@ -1,0 +1,15 @@
+server:
+  address: ":8080"
+
+pelican:
+  url:
+  api_key:
+
+minecraft:
+  domain:
+
+infrared:
+  config:
+
+sync:
+  interval: 30s
