@@ -82,12 +82,6 @@ var errNilDiscoveryService = errors.New(
 	"HTTP server requires a discovery service",
 )
 
-// NewRouter returns the minimal router used before application dependencies
-// are wired into the HTTP server.
-func NewRouter() http.Handler {
-	return NewServer(&unavailableDiscoveryService{}).Router()
-}
-
 type unavailableDiscoveryService struct{}
 
 func (*unavailableDiscoveryService) Discover(

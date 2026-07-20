@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/rs/zerolog/log"
+	"github.com/zurco34/pelican-mc-router/internal/discovery"
+	"github.com/zurco34/pelican-mc-router/internal/pelican"
 
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
@@ -20,9 +22,19 @@ func Run() error {
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("validate configuration: %w", err)
 	}
-	address := serverAddress(cfg.Server)
+	pelicanClient, err := pelican.NewClient(pelican.Config{
+		BaseURL: cfg.Pelican.URL,
+		APIKey:  cfg.Pelican.APIKey,
+		Timeout: cfg.Pelican.Timeout,
+	})
+	if err != nil {
+		return fmt.Errorf("create Pelican client: %w", err)
+	}
 
-	router := api.NewRouter()
+	discoveryService := discovery.New(pelicanClient)
+
+	router := api.NewServer(discoveryService).Router()
+	address := serverAddress(cfg.Server)
 
 	log.Info().
 		Str("address", address).
