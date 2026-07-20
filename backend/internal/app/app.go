@@ -17,7 +17,9 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}
-
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("validate configuration: %w", err)
+	}
 	address := serverAddress(cfg.Server)
 
 	router := api.NewRouter()
