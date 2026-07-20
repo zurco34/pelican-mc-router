@@ -9,14 +9,14 @@ func mapMinecraftServer(
 	server pelican.ServerResource,
 ) models.MinecraftServer {
 	return models.MinecraftServer{
-		ID:         server.Attributes.ID,
-		UUID:       server.Attributes.UUID,
-		Identifier: server.Attributes.Identifier,
-		Name:       server.Attributes.Name,
-		NodeID:     server.Attributes.Node,
-		EggID:      server.Attributes.Egg,
-		Allocation: server.Attributes.Allocation,
-		Suspended:  server.Attributes.Suspended,
-		Status:     server.Attributes.Status,
+		ID:           server.Attributes.ID,
+		UUID:         server.Attributes.UUID,
+		Identifier:   server.Attributes.Identifier,
+		Name:         server.Attributes.Name,
+		NodeID:       server.Attributes.Node,
+		EggID:        server.Attributes.Egg,
+		AllocationID: server.Attributes.Allocation,
+		Suspended:    server.Attributes.Suspended,
+		Status:       server.Attributes.Status,
 	}
 }
