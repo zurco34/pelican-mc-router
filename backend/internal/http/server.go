@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 
@@ -76,16 +75,4 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{
 		"error": message,
 	})
-}
-
-var errNilDiscoveryService = errors.New(
-	"HTTP server requires a discovery service",
-)
-
-type unavailableDiscoveryService struct{}
-
-func (*unavailableDiscoveryService) Discover(
-	context.Context,
-) ([]models.MinecraftServer, error) {
-	return nil, errors.New("discovery service is not configured")
 }
