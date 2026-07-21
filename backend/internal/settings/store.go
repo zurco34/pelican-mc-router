@@ -15,13 +15,25 @@ type Store struct {
 	db *sql.DB
 }
 
+type settingWriter interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 func NewStore(db *sql.DB) *Store {
 	return &Store{
 		db: db,
 	}
 }
 func (s *Store) Set(key, value string) error {
-	_, err := s.db.Exec(`
+	return setValue(s.db, key, value)
+}
+
+func setValue(
+	writer settingWriter,
+	key string,
+	value string,
+) error {
+	_, err := writer.Exec(`
 		INSERT INTO settings (key, value, updated_at)
 		VALUES (?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(key) DO UPDATE SET
@@ -106,4 +118,48 @@ func (s *Store) Load() (Settings, error) {
 	result.RouterDomain = routerDomain
 
 	return result, nil
+}
+func (s *Store) SaveSetup(value Settings) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin setup settings transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	values := []struct {
+		key   string
+		value string
+	}{
+		{
+			key:   KeyPelicanURL,
+			value: value.PelicanURL,
+		},
+		{
+			key:   KeyPelicanAPIKey,
+			value: value.PelicanAPIKey,
+		},
+		{
+			key:   KeyRouterDomain,
+			value: value.RouterDomain,
+		},
+		{
+			key:   KeySetupCompleted,
+			value: strconv.FormatBool(true),
+		},
+	}
+
+	for _, setting := range values {
+		if err := setValue(tx, setting.key, setting.value); err != nil {
+			return fmt.Errorf("save %q: %w", setting.key, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit setup settings transaction: %w", err)
+	}
+
+	return nil
 }

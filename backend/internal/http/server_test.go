@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
+	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
@@ -35,20 +37,48 @@ func (f *fakeRoutingService) Routes(
 	return f.routes, f.err
 }
 
+type fakeSetupService struct {
+	completed bool
+	err       error
+	received  settings.Settings
+}
+
+func (f *fakeSetupService) IsSetupComplete(
+	context.Context,
+) (bool, error) {
+	return f.completed, f.err
+}
+func (f *fakeSetupService) Setup(
+	_ context.Context,
+	setupSettings settings.Settings,
+) error {
+	f.received = setupSettings
+
+	return f.err
+}
+
 func newTestServer(
 	discovery runtime.DiscoveryService,
 	routingService runtime.RoutingService,
+	setupService SetupService,
 ) *Server {
-	manager := runtime.New()
-	manager.Set(discovery, routingService)
+	runtimeManager := runtime.New()
+	runtimeManager.Set(
+		discovery,
+		routingService,
+	)
 
-	return NewServer(manager)
+	return NewServer(
+		runtimeManager,
+		setupService,
+	)
 }
 
 func TestHealthHandler(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
+		&fakeSetupService{},
 	)
 
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -96,7 +126,11 @@ func TestListServers(t *testing.T) {
 		},
 	}
 
-	server := newTestServer(discovery, &fakeRoutingService{})
+	server := newTestServer(
+		discovery,
+		&fakeRoutingService{},
+		&fakeSetupService{},
+	)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/servers",
@@ -164,8 +198,11 @@ func TestListServersReturnsInternalServerError(t *testing.T) {
 		err: errors.New("Pelican unavailable"),
 	}
 
-	server := newTestServer(discovery, &fakeRoutingService{})
-
+	server := newTestServer(
+		discovery,
+		&fakeRoutingService{},
+		&fakeSetupService{},
+	)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/servers",
@@ -206,6 +243,7 @@ func TestUnknownRouteReturnsNotFound(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
+		&fakeSetupService{},
 	)
 
 	request := httptest.NewRequest(
@@ -242,7 +280,9 @@ func TestListRoutes(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		routingService,
+		&fakeSetupService{},
 	)
+
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/routes",
@@ -328,6 +368,7 @@ func TestListRoutesReturnsInternalServerError(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		routingService,
+		&fakeSetupService{},
 	)
 
 	request := httptest.NewRequest(
@@ -366,15 +407,322 @@ func TestListRoutesReturnsInternalServerError(t *testing.T) {
 		)
 	}
 }
-func TestListServersReturnsServiceUnavailableWhenRuntimeIsEmpty(t *testing.T) {
-	manager := runtime.New()
-	server := NewServer(manager)
+func TestGetSetupStatus(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{
+			completed: true,
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/setup",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusOK,
+		)
+	}
+
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf(
+			"Content-Type = %q, want %q",
+			got,
+			"application/json",
+		)
+	}
+
+	var response struct {
+		Completed bool `json:"completed"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if !response.Completed {
+		t.Errorf("completed = false, want true")
+	}
+}
+func TestGetSetupStatusReturnsInternalServerError(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{
+			err: errors.New("database unavailable"),
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/setup",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusInternalServerError,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expected = "failed to get setup status"
+
+	if response.Error != expected {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expected,
+		)
+	}
+}
+func TestConfigureSetup(t *testing.T) {
+	setupService := &fakeSetupService{}
+
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		setupService,
+	)
+
+	body := strings.NewReader(`{
+		"pelican_url": " https://panel.example.com ",
+		"pelican_api_key": " application-api-key ",
+		"router_domain": " mc.example.com "
+	}`)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/setup",
+		body,
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf(
+			"status code = %d, want %d; body = %q",
+			recorder.Code,
+			http.StatusNoContent,
+			recorder.Body.String(),
+		)
+	}
+
+	if recorder.Body.Len() != 0 {
+		t.Errorf(
+			"response body = %q, want empty body",
+			recorder.Body.String(),
+		)
+	}
+
+	if got := setupService.received.PelicanURL; got != "https://panel.example.com" {
+		t.Errorf(
+			"Pelican URL = %q, want %q",
+			got,
+			"https://panel.example.com",
+		)
+	}
+
+	if got := setupService.received.PelicanAPIKey; got != "application-api-key" {
+		t.Errorf(
+			"Pelican API key = %q, want %q",
+			got,
+			"application-api-key",
+		)
+	}
+
+	if got := setupService.received.RouterDomain; got != "mc.example.com" {
+		t.Errorf(
+			"router domain = %q, want %q",
+			got,
+			"mc.example.com",
+		)
+	}
+}
+func TestConfigureSetupReturnsBadRequestForInvalidJSON(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/setup",
+		strings.NewReader(`{"pelican_url":`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusBadRequest,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if response.Error != "invalid request body" {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			"invalid request body",
+		)
+	}
+}
+func TestConfigureSetupReturnsBadRequestForUnknownField(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/setup",
+		strings.NewReader(`{
+			"pelican_url": "https://panel.example.com",
+			"pelican_api_key": "key",
+			"router_domain": "mc.example.com",
+			"unexpected": true
+		}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusBadRequest,
+		)
+	}
+}
+func TestConfigureSetupReturnsBadRequestForMultipleJSONValues(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/setup",
+		strings.NewReader(`{} {}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusBadRequest,
+		)
+	}
+}
+func TestConfigureSetupReturnsInternalServerError(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{
+			err: errors.New("setup failed"),
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/setup",
+		strings.NewReader(`{
+			"pelican_url": "https://panel.example.com",
+			"pelican_api_key": "key",
+			"router_domain": "mc.example.com"
+		}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusInternalServerError,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if response.Error != "failed to configure setup" {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			"failed to configure setup",
+		)
+	}
+}
+func TestListServersSetupIncomplete(t *testing.T) {
+	server := newTestServer(
+		nil,
+		&fakeRoutingService{},
+		&fakeSetupService{},
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/servers",
 		nil,
 	)
+
 	recorder := httptest.NewRecorder()
 
 	server.Router().ServeHTTP(recorder, request)
@@ -386,35 +734,20 @@ func TestListServersReturnsServiceUnavailableWhenRuntimeIsEmpty(t *testing.T) {
 			http.StatusServiceUnavailable,
 		)
 	}
-
-	var response struct {
-		Error string `json:"error"`
-	}
-
-	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	const expectedMessage = "runtime services are not available"
-
-	if response.Error != expectedMessage {
-		t.Errorf(
-			"error = %q, want %q",
-			response.Error,
-			expectedMessage,
-		)
-	}
 }
-
-func TestListRoutesReturnsServiceUnavailableWhenRuntimeIsEmpty(t *testing.T) {
-	manager := runtime.New()
-	server := NewServer(manager)
+func TestListRoutesSetupIncomplete(t *testing.T) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		nil,
+		&fakeSetupService{},
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/routes",
 		nil,
 	)
+
 	recorder := httptest.NewRecorder()
 
 	server.Router().ServeHTTP(recorder, request)
@@ -424,24 +757,6 @@ func TestListRoutesReturnsServiceUnavailableWhenRuntimeIsEmpty(t *testing.T) {
 			"status code = %d, want %d",
 			recorder.Code,
 			http.StatusServiceUnavailable,
-		)
-	}
-
-	var response struct {
-		Error string `json:"error"`
-	}
-
-	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	const expectedMessage = "runtime services are not available"
-
-	if response.Error != expectedMessage {
-		t.Errorf(
-			"error = %q, want %q",
-			response.Error,
-			expectedMessage,
 		)
 	}
 }
