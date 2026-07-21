@@ -6,47 +6,17 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/zurco34/pelican-mc-router/internal/discovery"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
-	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
+	"github.com/zurco34/pelican-mc-router/internal/scheduler"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
 	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
-
-type runtimeSettingsStore interface {
-	IsSetupComplete() (bool, error)
-	Load() (settings.Settings, error)
-}
-
-type runtimeRefresher struct {
-	store   runtimeSettingsStore
-	timeout time.Duration
-	manager *runtime.Manager
-}
-
-func (r *runtimeRefresher) Refresh(context.Context) error {
-	discoveryService, routingService, err := buildRuntimeServices(
-		r.store,
-		r.timeout,
-	)
-	if err != nil {
-		return fmt.Errorf("build runtime services: %w", err)
-	}
-
-	r.manager.Set(
-		discoveryService,
-		routingService,
-	)
-
-	return nil
-}
 
 func Run() error {
 	cfg, err := config.Load()
@@ -78,11 +48,11 @@ func Run() error {
 
 	runtimeManager := runtime.New()
 
-	refresher := &runtimeRefresher{
-		store:   settingsStore,
-		timeout: cfg.Pelican.Timeout,
-		manager: runtimeManager,
-	}
+	refresher := runtime.NewRefreshTask(
+		settingsStore,
+		cfg.Pelican.Timeout,
+		runtimeManager,
+	)
 
 	setupService := setup.NewService(
 		settingsStore,
@@ -90,9 +60,25 @@ func Run() error {
 		refresher,
 	)
 
-	if err := refresher.Refresh(context.Background()); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := refresher.Refresh(ctx); err != nil {
 		return fmt.Errorf("initialize runtime: %w", err)
 	}
+
+	runtimeScheduler := scheduler.NewTicker()
+
+	schedulerErrors := make(chan error, 1)
+
+	go func() {
+		schedulerErrors <- runtimeScheduler.Run(
+			ctx,
+			cfg.Discovery.Interval,
+			refresher,
+		)
+	}()
+
 	httpRouter := api.NewServer(
 		runtimeManager,
 		setupService,
@@ -104,62 +90,31 @@ func Run() error {
 		Str("address", address).
 		Msg("starting HTTP server")
 
-	if err := http.ListenAndServe(address, httpRouter); err != nil {
-		return fmt.Errorf("serve HTTP: %w", err)
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		serverErrors <- http.ListenAndServe(address, httpRouter)
+	}()
+
+	select {
+	case err := <-serverErrors:
+		cancel()
+
+		if err != nil {
+			return fmt.Errorf("serve HTTP: %w", err)
+		}
+
+		return nil
+
+	case err := <-schedulerErrors:
+		cancel()
+
+		if err != nil {
+			return fmt.Errorf("run runtime scheduler: %w", err)
+		}
+
+		return nil
 	}
-
-	return nil
-}
-func buildRuntimeServices(
-	store runtimeSettingsStore,
-	timeout time.Duration,
-) (runtime.DiscoveryService, runtime.RoutingService, error) {
-	setupComplete, err := store.IsSetupComplete()
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"determine setup status: %w",
-			err,
-		)
-	}
-
-	if !setupComplete {
-		return nil, nil, nil
-	}
-
-	runtimeSettings, err := store.Load()
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"load runtime settings: %w",
-			err,
-		)
-	}
-
-	pelicanClient, err := pelican.NewClient(pelican.Config{
-		BaseURL: runtimeSettings.PelicanURL,
-		APIKey:  runtimeSettings.PelicanAPIKey,
-		Timeout: timeout,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"create Pelican client: %w",
-			err,
-		)
-	}
-
-	discoveryService := discovery.New(pelicanClient)
-
-	routingService, err := router.New(
-		discoveryService,
-		runtimeSettings.RouterDomain,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"create routing service: %w",
-			err,
-		)
-	}
-
-	return discoveryService, routingService, nil
 }
 
 func serverAddress(cfg config.ServerConfig) string {
