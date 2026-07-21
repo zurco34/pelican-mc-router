@@ -50,6 +50,10 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadFromFile(t *testing.T) {
+
+	t.Setenv("PELICAN_MC_ROUTER_PELICAN_URL", "")
+	t.Setenv("PELICAN_MC_ROUTER_ROUTER_DOMAIN", "")
+
 	directory := t.TempDir()
 
 	configContent := []byte(`
