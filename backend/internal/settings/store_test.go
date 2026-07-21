@@ -1,0 +1,337 @@
+package settings
+
+import (
+	"errors"
+	"path/filepath"
+	"testing"
+
+	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
+)
+
+func TestNewStore(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+	if store == nil {
+		t.Fatal("NewStore() returned nil")
+	}
+
+	if store.db != db {
+		t.Fatal("NewStore() did not retain the database connection")
+	}
+}
+func TestStoreSet(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	err = store.Set("router.domain", "mc.example.com")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	var value string
+	err = db.QueryRow(
+		`SELECT value FROM settings WHERE key = ?`,
+		"router.domain",
+	).Scan(&value)
+	if err != nil {
+		t.Fatalf("query saved setting: %v", err)
+	}
+
+	if value != "mc.example.com" {
+		t.Fatalf("saved value = %q, want %q", value, "mc.example.com")
+	}
+}
+func TestStoreGet(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	if err := store.Set("router.domain", "mc.example.com"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	value, err := store.Get("router.domain")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if value != "mc.example.com" {
+		t.Fatalf("Get() = %q, want %q", value, "mc.example.com")
+	}
+}
+func TestStoreGetReturnsErrNotFound(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	_, err = store.Get("missing.setting")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get() error = %v, want ErrNotFound", err)
+	}
+}
+func TestStoreSetUpdatesExistingSetting(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	if err := store.Set("router.domain", "old.example.com"); err != nil {
+		t.Fatalf("first Set() error = %v", err)
+	}
+
+	if err := store.Set("router.domain", "new.example.com"); err != nil {
+		t.Fatalf("second Set() error = %v", err)
+	}
+
+	value, err := store.Get("router.domain")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if value != "new.example.com" {
+		t.Fatalf("Get() = %q, want %q", value, "new.example.com")
+	}
+
+	var count int
+	err = db.QueryRow(
+		`SELECT COUNT(*) FROM settings WHERE key = ?`,
+		"router.domain",
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("count settings: %v", err)
+	}
+
+	if count != 1 {
+		t.Fatalf("setting row count = %d, want 1", count)
+	}
+}
+
+func TestStoreIsSetupCompleteDefaultsToFalse(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	complete, err := store.IsSetupComplete()
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+
+	if complete {
+		t.Fatal("IsSetupComplete() = true, want false")
+	}
+}
+
+func TestStoreSetSetupComplete(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	if err := store.SetSetupComplete(true); err != nil {
+		t.Fatalf("SetSetupComplete() error = %v", err)
+	}
+
+	complete, err := store.IsSetupComplete()
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+
+	if !complete {
+		t.Fatal("IsSetupComplete() = false, want true")
+	}
+}
+func TestStoreIsSetupCompleteRejectsInvalidValue(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	if err := store.Set(KeySetupCompleted, "not-a-boolean"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	_, err = store.IsSetupComplete()
+	if err == nil {
+		t.Fatal("IsSetupComplete() error = nil, want an error")
+	}
+}
+func TestStoreSaveSettings(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	input := Settings{
+		PelicanURL:    "https://panel.example.com",
+		PelicanAPIKey: "test-api-key",
+		RouterDomain:  "mc.example.com",
+	}
+
+	if err := store.Save(input); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	tests := map[string]string{
+		KeyPelicanURL:    input.PelicanURL,
+		KeyPelicanAPIKey: input.PelicanAPIKey,
+		KeyRouterDomain:  input.RouterDomain,
+	}
+
+	for key, want := range tests {
+		var got string
+
+		err := db.QueryRow(
+			`SELECT value FROM settings WHERE key = ?`,
+			key,
+		).Scan(&got)
+		if err != nil {
+			t.Fatalf("query setting %q: %v", key, err)
+		}
+
+		if got != want {
+			t.Fatalf("setting %q = %q, want %q", key, got, want)
+		}
+	}
+}
+func TestStoreLoadSettings(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	want := Settings{
+		PelicanURL:    "https://panel.example.com",
+		PelicanAPIKey: "test-api-key",
+		RouterDomain:  "mc.example.com",
+	}
+
+	if err := store.Save(want); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got != want {
+		t.Fatalf("Load() = %#v, want %#v", got, want)
+	}
+}
+func TestStoreLoadReturnsErrNotFoundWhenSettingsAreMissing(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	_, err = store.Load()
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Load() error = %v, want errors.Is(error, ErrNotFound)", err)
+	}
+}

@@ -131,3 +131,30 @@ func TestMigrateIsIdempotent(t *testing.T) {
 		t.Fatalf("migration count = %d, want 1", count)
 	}
 }
+func TestMigrateCreatesSettingsTable(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "router.db")
+
+	db, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	var tableName string
+	err = db.QueryRow(`
+		SELECT name
+		FROM sqlite_master
+		WHERE type = 'table' AND name = 'settings'
+	`).Scan(&tableName)
+	if err != nil {
+		t.Fatalf("query settings table: %v", err)
+	}
+
+	if tableName != "settings" {
+		t.Fatalf("table name = %q, want %q", tableName, "settings")
+	}
+}
