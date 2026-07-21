@@ -33,10 +33,23 @@ func (f *fakeRoutingService) Routes(
 ) ([]routing.Route, error) {
 	return f.routes, f.err
 }
+
+type fakeSetupStatusService struct {
+	completed bool
+	err       error
+}
+
+func (f *fakeSetupStatusService) IsSetupComplete(
+	context.Context,
+) (bool, error) {
+	return f.completed, f.err
+}
+
 func TestHealthHandler(t *testing.T) {
 	server := NewServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
+		&fakeSetupStatusService{},
 	)
 
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -84,8 +97,11 @@ func TestListServers(t *testing.T) {
 		},
 	}
 
-	server := NewServer(discovery, &fakeRoutingService{})
-
+	server := NewServer(
+		discovery,
+		&fakeRoutingService{},
+		&fakeSetupStatusService{},
+	)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/servers",
@@ -153,8 +169,11 @@ func TestListServersReturnsInternalServerError(t *testing.T) {
 		err: errors.New("Pelican unavailable"),
 	}
 
-	server := NewServer(discovery, &fakeRoutingService{})
-
+	server := NewServer(
+		discovery,
+		&fakeRoutingService{},
+		&fakeSetupStatusService{},
+	)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/servers",
@@ -195,6 +214,7 @@ func TestUnknownRouteReturnsNotFound(t *testing.T) {
 	server := NewServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
+		&fakeSetupStatusService{},
 	)
 
 	request := httptest.NewRequest(
@@ -231,6 +251,7 @@ func TestListRoutes(t *testing.T) {
 	server := NewServer(
 		&fakeDiscoveryService{},
 		routingService,
+		&fakeSetupStatusService{},
 	)
 
 	request := httptest.NewRequest(
@@ -318,6 +339,7 @@ func TestListRoutesReturnsInternalServerError(t *testing.T) {
 	server := NewServer(
 		&fakeDiscoveryService{},
 		routingService,
+		&fakeSetupStatusService{},
 	)
 
 	request := httptest.NewRequest(
@@ -353,6 +375,96 @@ func TestListRoutesReturnsInternalServerError(t *testing.T) {
 			"error = %q, want %q",
 			response.Error,
 			expectedMessage,
+		)
+	}
+}
+func TestGetSetupStatus(t *testing.T) {
+	server := NewServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupStatusService{
+			completed: true,
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/setup",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusOK,
+		)
+	}
+
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf(
+			"Content-Type = %q, want %q",
+			got,
+			"application/json",
+		)
+	}
+
+	var response struct {
+		Completed bool `json:"completed"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if !response.Completed {
+		t.Errorf("completed = false, want true")
+	}
+}
+func TestGetSetupStatusReturnsInternalServerError(t *testing.T) {
+	server := NewServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupStatusService{
+			err: errors.New("database unavailable"),
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/setup",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusInternalServerError,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expected = "failed to get setup status"
+
+	if response.Error != expected {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expected,
 		)
 	}
 }

@@ -19,19 +19,24 @@ type DiscoveryService interface {
 type RoutingService interface {
 	Routes(context.Context) ([]routing.Route, error)
 }
-
+type SetupStatusService interface {
+	IsSetupComplete(context.Context) (bool, error)
+}
 type Server struct {
 	discovery DiscoveryService
 	routing   RoutingService
+	setup     SetupStatusService
 }
 
 func NewServer(
 	discovery DiscoveryService,
 	routing RoutingService,
+	setup SetupStatusService,
 ) *Server {
 	return &Server{
 		discovery: discovery,
 		routing:   routing,
+		setup:     setup,
 	}
 }
 
@@ -41,7 +46,7 @@ func (s *Server) Router() http.Handler {
 	router.Get("/health", healthHandler)
 	router.Get("/api/v1/servers", s.listServers)
 	router.Get("/api/v1/routes", s.listRoutes)
-
+	router.Get("/api/v1/setup", s.getSetupStatus)
 	return router
 }
 
@@ -95,6 +100,28 @@ func (s *Server) listRoutes(
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"routes": routes,
+	})
+}
+
+func (s *Server) getSetupStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	completed, err := s.setup.IsSetupComplete(r.Context())
+	if err != nil {
+		slog.Error("get setup status", "error", err)
+
+		writeJSONError(
+			w,
+			http.StatusInternalServerError,
+			"failed to get setup status",
+		)
+
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"completed": completed,
 	})
 }
 

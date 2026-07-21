@@ -44,8 +44,8 @@ func Run() error {
 	httpRouter := api.NewServer(
 		discoveryService,
 		routingService,
+		nil, // setup service will be added next
 	).Router()
-
 	address := serverAddress(cfg.Server)
 
 	log.Info().
