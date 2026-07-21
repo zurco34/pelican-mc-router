@@ -2,10 +2,12 @@ package setup
 
 import "github.com/zurco34/pelican-mc-router/internal/pelican"
 
-type DefaultPelicanClientFactory struct{}
+type PelicanClientFactoryFunc func(
+	pelican.Config,
+) (PelicanNodeLister, error)
 
-func (DefaultPelicanClientFactory) New(
-	config pelican.Config,
+func (f PelicanClientFactoryFunc) New(
+	cfg pelican.Config,
 ) (PelicanNodeLister, error) {
-	return pelican.NewClient(config)
+	return f(cfg)
 }

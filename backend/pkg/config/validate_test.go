@@ -6,6 +6,51 @@ import (
 	"time"
 )
 
+func TestConfigValidateInfrastructure(t *testing.T) {
+	cfg := Config{
+		Server: ServerConfig{
+			Host: "0.0.0.0",
+			Port: 8080,
+		},
+		Database: DatabaseConfig{
+			Path: "./data/pelican-mc-router.db",
+		},
+		Discovery: DiscoveryConfig{
+			Interval: 30 * time.Second,
+		},
+	}
+
+	if err := cfg.ValidateInfrastructure(); err != nil {
+		t.Fatalf("ValidateInfrastructure() error = %v", err)
+	}
+}
+func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
+	t *testing.T,
+) {
+	cfg := Config{
+		Server: ServerConfig{
+			Host: "0.0.0.0",
+			Port: 8080,
+		},
+		Database: DatabaseConfig{
+			Path: "./data/pelican-mc-router.db",
+		},
+		Discovery: DiscoveryConfig{
+			Interval: 30 * time.Second,
+		},
+	}
+
+	cfg.Pelican.URL = ""
+	cfg.Pelican.APIKey = ""
+	cfg.Router.Domain = ""
+
+	if err := cfg.ValidateInfrastructure(); err != nil {
+		t.Fatalf(
+			"ValidateInfrastructure() error = %v",
+			err,
+		)
+	}
+}
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -26,6 +71,18 @@ func TestConfigValidate(t *testing.T) {
 			}(),
 			wantErr: ErrInvalidServerPort,
 		},
+
+		{
+			name: "missing database path",
+			cfg: func() Config {
+				cfg := validConfig()
+				cfg.Database.Path = ""
+
+				return cfg
+			}(),
+			wantErr: ErrMissingDatabasePath,
+		},
+
 		{
 			name: "missing Pelican URL",
 			cfg: func() Config {
@@ -144,6 +201,9 @@ func validConfig() Config {
 		Server: ServerConfig{
 			Host: "0.0.0.0",
 			Port: 8080,
+		},
+		Database: DatabaseConfig{
+			Path: "./data/pelican-mc-router.db",
 		},
 		Pelican: PelicanConfig{
 			URL:     "https://panel.example.com",

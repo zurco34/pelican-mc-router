@@ -14,8 +14,10 @@ var (
 )
 
 type stubSettingsStore struct {
-	saved   settings.Settings
-	saveErr error
+	saved            settings.Settings
+	saveErr          error
+	setupComplete    bool
+	setupCompleteErr error
 }
 
 func (s *stubSettingsStore) SaveSetup(value settings.Settings) error {
@@ -25,6 +27,10 @@ func (s *stubSettingsStore) SaveSetup(value settings.Settings) error {
 
 	s.saved = value
 	return nil
+}
+
+func (s *stubSettingsStore) IsSetupComplete() (bool, error) {
+	return s.setupComplete, s.setupCompleteErr
 }
 
 type stubPelicanValidator struct {
@@ -183,4 +189,52 @@ func TestServiceSetup(t *testing.T) {
 
 	})
 
+}
+func TestServiceIsSetupComplete(t *testing.T) {
+	store := &stubSettingsStore{
+		setupComplete: true,
+	}
+
+	service := NewService(
+		store,
+		&stubPelicanValidator{},
+	)
+
+	complete, err := service.IsSetupComplete(context.Background())
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+
+	if !complete {
+		t.Fatal("IsSetupComplete() = false, want true")
+	}
+}
+func TestServiceIsSetupCompleteReturnsStoreError(t *testing.T) {
+	store := &stubSettingsStore{
+		setupCompleteErr: errors.New("database unavailable"),
+	}
+
+	service := NewService(
+		store,
+		&stubPelicanValidator{},
+	)
+
+	complete, err := service.IsSetupComplete(context.Background())
+	if err == nil {
+		t.Fatal("IsSetupComplete() error = nil, want an error")
+	}
+
+	if complete {
+		t.Fatal("IsSetupComplete() = true, want false")
+	}
+
+	const expected = "setup: determine setup status: database unavailable"
+
+	if err.Error() != expected {
+		t.Errorf(
+			"IsSetupComplete() error = %q, want %q",
+			err,
+			expected,
+		)
+	}
 }
