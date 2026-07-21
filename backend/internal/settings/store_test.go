@@ -335,3 +335,46 @@ func TestStoreLoadReturnsErrNotFoundWhenSettingsAreMissing(t *testing.T) {
 		t.Fatalf("Load() error = %v, want errors.Is(error, ErrNotFound)", err)
 	}
 }
+func TestStoreSaveSetup(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	want := Settings{
+		PelicanURL:    "https://panel.example.com/api/application",
+		PelicanAPIKey: "test-api-key",
+		RouterDomain:  "mc.example.com",
+	}
+
+	if err := store.SaveSetup(want); err != nil {
+		t.Fatalf("SaveSetup() error = %v", err)
+	}
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got != want {
+		t.Fatalf("Load() = %#v, want %#v", got, want)
+	}
+
+	complete, err := store.IsSetupComplete()
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+
+	if !complete {
+		t.Fatal("IsSetupComplete() = false, want true")
+	}
+}
