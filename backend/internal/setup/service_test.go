@@ -11,6 +11,7 @@ import (
 var (
 	errValidationFailed = errors.New("validation failed")
 	errSaveFailed       = errors.New("save failed")
+	errRefreshFailed    = errors.New("refresh failed")
 )
 
 type stubSettingsStore struct {
@@ -27,6 +28,14 @@ func (s *stubSettingsStore) SaveSetup(value settings.Settings) error {
 
 	s.saved = value
 	return nil
+}
+
+func (s *stubSettingsStore) Save(
+	value settings.Settings,
+) error {
+	s.saved = value
+
+	return s.saveErr
 }
 
 func (s *stubSettingsStore) IsSetupComplete() (bool, error) {
@@ -52,11 +61,21 @@ func (s *stubPelicanValidator) Validate(
 	return s.err
 }
 
+type stubRuntimeRefresher struct {
+	called bool
+	err    error
+}
+
+func (s *stubRuntimeRefresher) Refresh(context.Context) error {
+	s.called = true
+	return s.err
+}
+
 func TestNewService(t *testing.T) {
 	store := &stubSettingsStore{}
 	validator := &stubPelicanValidator{}
 
-	service := NewService(store, validator)
+	service := NewService(store, validator, nil)
 
 	if service == nil {
 		t.Fatal("NewService() returned nil")
@@ -71,11 +90,11 @@ func TestNewService(t *testing.T) {
 	}
 }
 func TestServiceSetup(t *testing.T) {
+
 	t.Run("validates and persists normalized settings", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		validator := &stubPelicanValidator{}
-		service := NewService(store, validator)
-
+		service := NewService(store, validator, nil)
 		err := service.Setup(context.Background(), settings.Settings{
 			PelicanURL:    "  https://panel.example.com/api/application/  ",
 			PelicanAPIKey: "  test-api-key  ",
@@ -115,14 +134,132 @@ func TestServiceSetup(t *testing.T) {
 			)
 		}
 	})
+	t.Run("refreshes runtime after persisting settings", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		validator := &stubPelicanValidator{}
+		refresher := &stubRuntimeRefresher{}
+
+		service := NewService(
+			store,
+			validator,
+			refresher,
+		)
+
+		err := service.Setup(context.Background(), settings.Settings{
+			PelicanURL:    "https://panel.example.com/api/application",
+			PelicanAPIKey: "test-api-key",
+			RouterDomain:  "mc.example.com",
+		})
+		if err != nil {
+			t.Fatalf("Setup() error = %v", err)
+		}
+
+		if !refresher.called {
+			t.Fatal("runtime refresher was not called")
+		}
+	})
+
+	t.Run("returns an error when runtime refresh fails", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		validator := &stubPelicanValidator{}
+		refresher := &stubRuntimeRefresher{
+			err: errRefreshFailed,
+		}
+
+		service := NewService(
+			store,
+			validator,
+			refresher,
+		)
+
+		err := service.Setup(context.Background(), settings.Settings{
+			PelicanURL:    "https://panel.example.com/api/application",
+			PelicanAPIKey: "test-api-key",
+			RouterDomain:  "mc.example.com",
+		})
+		if !errors.Is(err, errRefreshFailed) {
+			t.Fatalf(
+				"Setup() error = %v, want errors.Is(error, errRefreshFailed)",
+				err,
+			)
+		}
+
+		if store.saved == (settings.Settings{}) {
+			t.Fatal("settings were not persisted before runtime refresh")
+		}
+	})
+
+	t.Run("updates settings and refreshes runtime", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		validator := &stubPelicanValidator{}
+		refresher := &stubRuntimeRefresher{}
+
+		service := NewService(
+			store,
+			validator,
+			refresher,
+		)
+
+		err := service.Update(context.Background(), settings.Settings{
+			PelicanURL:    " https://panel.example.com/api/application/ ",
+			PelicanAPIKey: " test-api-key ",
+			RouterDomain:  " mc.example.com ",
+		})
+		if err != nil {
+			t.Fatalf("Update() error = %v", err)
+		}
+
+		want := settings.Settings{
+			PelicanURL:    "https://panel.example.com/api/application/",
+			PelicanAPIKey: "test-api-key",
+			RouterDomain:  "mc.example.com",
+		}
+
+		if store.saved != want {
+			t.Fatalf(
+				"saved settings = %#v, want %#v",
+				store.saved,
+				want,
+			)
+		}
+
+		if !refresher.called {
+			t.Fatal("runtime refresher was not called")
+		}
+	})
+
+	t.Run("returns an error when updating settings fails", func(t *testing.T) {
+		store := &stubSettingsStore{
+			saveErr: errSaveFailed,
+		}
+		validator := &stubPelicanValidator{}
+
+		service := NewService(
+			store,
+			validator,
+			nil,
+		)
+
+		err := service.Update(context.Background(), settings.Settings{
+			PelicanURL:    "https://panel.example.com/api/application/",
+			PelicanAPIKey: "test-api-key",
+			RouterDomain:  "mc.example.com",
+		})
+		if !errors.Is(err, errSaveFailed) {
+			t.Fatalf(
+				"Update() error = %v, want errors.Is(error, errSaveFailed)",
+				err,
+			)
+		}
+	})
 
 	t.Run("rejects missing router domain before validation", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		validator := &stubPelicanValidator{}
-		service := NewService(store, validator)
+		service := NewService(store, validator, nil)
 
 		err := service.Setup(context.Background(), settings.Settings{
-			PelicanURL:    "https://panel.example.com/api/application",
+			PelicanURL:    "https://panel.example.com/api/application/",
 			PelicanAPIKey: "test-api-key",
 			RouterDomain:  "   ",
 		})
@@ -148,7 +285,7 @@ func TestServiceSetup(t *testing.T) {
 		validator := &stubPelicanValidator{
 			err: errValidationFailed,
 		}
-		service := NewService(store, validator)
+		service := NewService(store, validator, nil)
 
 		err := service.Setup(context.Background(), settings.Settings{
 			PelicanURL:    "https://panel.example.com/api/application",
@@ -173,7 +310,7 @@ func TestServiceSetup(t *testing.T) {
 			saveErr: errSaveFailed,
 		}
 		validator := &stubPelicanValidator{}
-		service := NewService(store, validator)
+		service := NewService(store, validator, nil)
 
 		err := service.Setup(context.Background(), settings.Settings{
 			PelicanURL:    "https://panel.example.com/api/application",
@@ -198,6 +335,7 @@ func TestServiceIsSetupComplete(t *testing.T) {
 	service := NewService(
 		store,
 		&stubPelicanValidator{},
+		nil,
 	)
 
 	complete, err := service.IsSetupComplete(context.Background())
@@ -217,6 +355,7 @@ func TestServiceIsSetupCompleteReturnsStoreError(t *testing.T) {
 	service := NewService(
 		store,
 		&stubPelicanValidator{},
+		nil,
 	)
 
 	complete, err := service.IsSetupComplete(context.Background())

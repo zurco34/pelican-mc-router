@@ -1,13 +1,17 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	routing "github.com/zurco34/pelican-mc-router/internal/router"
+	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
+	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
 type fakeRuntimeSettingsStore struct {
@@ -28,6 +32,21 @@ func (f *fakeRuntimeSettingsStore) Load() (settings.Settings, error) {
 	return f.settings, f.loadErr
 }
 
+type fakeDiscoveryService struct{}
+
+func (*fakeDiscoveryService) Discover(
+	context.Context,
+) ([]models.MinecraftServer, error) {
+	return nil, nil
+}
+
+type fakeRoutingService struct{}
+
+func (*fakeRoutingService) Routes(
+	context.Context,
+) ([]routing.Route, error) {
+	return nil, nil
+}
 func TestBuildRuntimeServicesSetupIncomplete(t *testing.T) {
 	store := &fakeRuntimeSettingsStore{
 		setupComplete: false,
@@ -96,6 +115,62 @@ func TestBuildRuntimeServicesReturnsLoadError(t *testing.T) {
 	if !strings.Contains(err.Error(), "load runtime settings") {
 		t.Fatalf(
 			"error = %q, want runtime settings context",
+			err,
+		)
+	}
+}
+
+func TestRuntimeRefresherRefreshClearsRuntimeWhenSetupIncomplete(t *testing.T) {
+	store := &fakeRuntimeSettingsStore{
+		setupComplete: false,
+	}
+	manager := runtime.New()
+
+	manager.Set(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+	)
+
+	refresher := &runtimeRefresher{
+		store:   store,
+		timeout: 5 * time.Second,
+		manager: manager,
+	}
+
+	err := refresher.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+
+	if manager.Discovery() != nil {
+		t.Fatal("runtime discovery service is not nil")
+	}
+
+	if manager.Routing() != nil {
+		t.Fatal("runtime routing service is not nil")
+	}
+}
+
+func TestRuntimeRefresherRefreshReturnsBuildError(t *testing.T) {
+	store := &fakeRuntimeSettingsStore{
+		setupErr: errors.New("database unavailable"),
+	}
+	manager := runtime.New()
+
+	refresher := &runtimeRefresher{
+		store:   store,
+		timeout: 5 * time.Second,
+		manager: manager,
+	}
+
+	err := refresher.Refresh(context.Background())
+	if err == nil {
+		t.Fatal("Refresh() error = nil, want an error")
+	}
+
+	if !strings.Contains(err.Error(), "build runtime services") {
+		t.Fatalf(
+			"Refresh() error = %q, want build runtime services context",
 			err,
 		)
 	}

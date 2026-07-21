@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,6 +23,29 @@ import (
 type runtimeSettingsStore interface {
 	IsSetupComplete() (bool, error)
 	Load() (settings.Settings, error)
+}
+
+type runtimeRefresher struct {
+	store   runtimeSettingsStore
+	timeout time.Duration
+	manager *runtime.Manager
+}
+
+func (r *runtimeRefresher) Refresh(context.Context) error {
+	discoveryService, routingService, err := buildRuntimeServices(
+		r.store,
+		r.timeout,
+	)
+	if err != nil {
+		return fmt.Errorf("build runtime services: %w", err)
+	}
+
+	r.manager.Set(
+		discoveryService,
+		routingService,
+	)
+
+	return nil
 }
 
 func Run() error {
@@ -52,24 +76,23 @@ func Run() error {
 		cfg.Pelican.Timeout,
 	)
 
+	runtimeManager := runtime.New()
+
+	refresher := &runtimeRefresher{
+		store:   settingsStore,
+		timeout: cfg.Pelican.Timeout,
+		manager: runtimeManager,
+	}
+
 	setupService := setup.NewService(
 		settingsStore,
 		validator,
+		refresher,
 	)
 
-	discoveryService, routingService, err := buildRuntimeServices(
-		settingsStore,
-		cfg.Pelican.Timeout,
-	)
-	if err != nil {
-		return err
+	if err := refresher.Refresh(context.Background()); err != nil {
+		return fmt.Errorf("initialize runtime: %w", err)
 	}
-	runtimeManager := runtime.New()
-	runtimeManager.Set(
-		discoveryService,
-		routingService,
-	)
-
 	httpRouter := api.NewServer(
 		runtimeManager,
 		setupService,

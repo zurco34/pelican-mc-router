@@ -17,6 +17,7 @@ import (
 type SetupService interface {
 	IsSetupComplete(context.Context) (bool, error)
 	Setup(context.Context, settings.Settings) error
+	Update(context.Context, settings.Settings) error
 }
 
 type setupRequest struct {
@@ -48,6 +49,7 @@ func (s *Server) Router() http.Handler {
 	router.Get("/api/v1/routes", s.listRoutes)
 	router.Get("/api/v1/setup", s.getSetupStatus)
 	router.Post("/api/v1/setup", s.configureSetup)
+	router.Put("/api/v1/settings", s.updateSettings)
 
 	return router
 }
@@ -185,6 +187,60 @@ func (s *Server) configureSetup(
 			w,
 			http.StatusInternalServerError,
 			"failed to configure setup",
+		)
+
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) updateSettings(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	var request setupRequest
+
+	decoder := json.NewDecoder(
+		http.MaxBytesReader(w, r.Body, 1<<20),
+	)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid request body",
+		)
+
+		return
+	}
+
+	var trailing any
+
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid request body",
+		)
+
+		return
+	}
+
+	updatedSettings := settings.Settings{
+		PelicanURL:    strings.TrimSpace(request.PelicanURL),
+		PelicanAPIKey: strings.TrimSpace(request.PelicanAPIKey),
+		RouterDomain:  strings.TrimSpace(request.RouterDomain),
+	}
+
+	if err := s.setup.Update(r.Context(), updatedSettings); err != nil {
+		slog.Error("update settings", "error", err)
+
+		writeJSONError(
+			w,
+			http.StatusInternalServerError,
+			"failed to update settings",
 		)
 
 		return

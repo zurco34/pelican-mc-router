@@ -13,6 +13,7 @@ var ErrMissingRouterDomain = errors.New("setup: router domain is required")
 
 type SettingsStore interface {
 	IsSetupComplete() (bool, error)
+	Save(settings.Settings) error
 	SaveSetup(settings.Settings) error
 }
 
@@ -24,18 +25,25 @@ type PelicanValidator interface {
 	) error
 }
 
+type RuntimeRefresher interface {
+	Refresh(context.Context) error
+}
+
 type Service struct {
 	store     SettingsStore
 	validator PelicanValidator
+	refresher RuntimeRefresher
 }
 
 func NewService(
 	store SettingsStore,
 	validator PelicanValidator,
+	refresher RuntimeRefresher,
 ) *Service {
 	return &Service{
 		store:     store,
 		validator: validator,
+		refresher: refresher,
 	}
 }
 
@@ -53,9 +61,10 @@ func (s *Service) IsSetupComplete(
 	return complete, nil
 }
 
-func (s *Service) Setup(
+func (s *Service) saveAndRefresh(
 	ctx context.Context,
 	input settings.Settings,
+	save func(settings.Settings) error,
 ) error {
 	input.PelicanURL = strings.TrimSpace(input.PelicanURL)
 	input.PelicanAPIKey = strings.TrimSpace(input.PelicanAPIKey)
@@ -72,9 +81,38 @@ func (s *Service) Setup(
 	); err != nil {
 		return fmt.Errorf("setup: validate Pelican credentials: %w", err)
 	}
-	if err := s.store.SaveSetup(input); err != nil {
+
+	if err := save(input); err != nil {
 		return fmt.Errorf("save setup: %w", err)
 	}
 
+	if s.refresher != nil {
+		if err := s.refresher.Refresh(ctx); err != nil {
+			return fmt.Errorf("refresh runtime: %w", err)
+		}
+	}
+
 	return nil
+}
+
+func (s *Service) Setup(
+	ctx context.Context,
+	input settings.Settings,
+) error {
+	return s.saveAndRefresh(
+		ctx,
+		input,
+		s.store.SaveSetup,
+	)
+}
+
+func (s *Service) Update(
+	ctx context.Context,
+	input settings.Settings,
+) error {
+	return s.saveAndRefresh(
+		ctx,
+		input,
+		s.store.Save,
+	)
 }
