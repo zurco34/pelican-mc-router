@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
@@ -22,8 +23,21 @@ func (f *fakeDiscoveryService) Discover(
 	return f.servers, f.err
 }
 
+type fakeRoutingService struct {
+	routes []routing.Route
+	err    error
+}
+
+func (f *fakeRoutingService) Routes(
+	context.Context,
+) ([]routing.Route, error) {
+	return f.routes, f.err
+}
 func TestHealthHandler(t *testing.T) {
-	server := NewServer(&fakeDiscoveryService{})
+	server := NewServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+	)
 
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
 	recorder := httptest.NewRecorder()
@@ -70,7 +84,7 @@ func TestListServers(t *testing.T) {
 		},
 	}
 
-	server := NewServer(discovery)
+	server := NewServer(discovery, &fakeRoutingService{})
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -139,7 +153,7 @@ func TestListServersReturnsInternalServerError(t *testing.T) {
 		err: errors.New("Pelican unavailable"),
 	}
 
-	server := NewServer(discovery)
+	server := NewServer(discovery, &fakeRoutingService{})
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -178,7 +192,10 @@ func TestListServersReturnsInternalServerError(t *testing.T) {
 }
 
 func TestUnknownRouteReturnsNotFound(t *testing.T) {
-	server := NewServer(&fakeDiscoveryService{})
+	server := NewServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -194,6 +211,148 @@ func TestUnknownRouteReturnsNotFound(t *testing.T) {
 			"status code = %d, want %d",
 			recorder.Code,
 			http.StatusNotFound,
+		)
+	}
+}
+func TestListRoutes(t *testing.T) {
+	routingService := &fakeRoutingService{
+		routes: []routing.Route{
+			{
+				ServerID: "abc12345",
+				Hostname: "vanilla.mc.example.com",
+				Backend: routing.Backend{
+					Host: "192.168.1.10",
+					Port: 25565,
+				},
+			},
+		},
+	}
+
+	server := NewServer(
+		&fakeDiscoveryService{},
+		routingService,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/routes",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusOK,
+		)
+	}
+
+	if got := recorder.Header().Get("Content-Type"); got !=
+		"application/json" {
+		t.Errorf(
+			"Content-Type = %q, want %q",
+			got,
+			"application/json",
+		)
+	}
+
+	var response struct {
+		Routes []routing.Route `json:"routes"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).
+		Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(response.Routes) != 1 {
+		t.Fatalf(
+			"route count = %d, want 1",
+			len(response.Routes),
+		)
+	}
+
+	got := response.Routes[0]
+
+	if got.ServerID != "abc12345" {
+		t.Errorf(
+			"server ID = %q, want %q",
+			got.ServerID,
+			"abc12345",
+		)
+	}
+
+	if got.Hostname != "vanilla.mc.example.com" {
+		t.Errorf(
+			"hostname = %q, want %q",
+			got.Hostname,
+			"vanilla.mc.example.com",
+		)
+	}
+
+	if got.Backend.Host != "192.168.1.10" {
+		t.Errorf(
+			"backend host = %q, want %q",
+			got.Backend.Host,
+			"192.168.1.10",
+		)
+	}
+
+	if got.Backend.Port != 25565 {
+		t.Errorf(
+			"backend port = %d, want %d",
+			got.Backend.Port,
+			25565,
+		)
+	}
+}
+
+func TestListRoutesReturnsInternalServerError(t *testing.T) {
+	routingService := &fakeRoutingService{
+		err: errors.New("route generation failed"),
+	}
+
+	server := NewServer(
+		&fakeDiscoveryService{},
+		routingService,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/routes",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusInternalServerError,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).
+		Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expectedMessage = "failed to generate Minecraft routes"
+
+	if response.Error != expectedMessage {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expectedMessage,
 		)
 	}
 }

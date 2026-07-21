@@ -8,9 +8,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/zurco34/pelican-mc-router/internal/discovery"
-	"github.com/zurco34/pelican-mc-router/internal/pelican"
-
 	api "github.com/zurco34/pelican-mc-router/internal/http"
+	"github.com/zurco34/pelican-mc-router/internal/pelican"
+	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
@@ -33,14 +33,26 @@ func Run() error {
 
 	discoveryService := discovery.New(pelicanClient)
 
-	router := api.NewServer(discoveryService).Router()
+	routingService, err := router.New(
+		discoveryService,
+		cfg.Router.Domain,
+	)
+	if err != nil {
+		return fmt.Errorf("create routing service: %w", err)
+	}
+
+	httpRouter := api.NewServer(
+		discoveryService,
+		routingService,
+	).Router()
+
 	address := serverAddress(cfg.Server)
 
 	log.Info().
 		Str("address", address).
 		Msg("starting HTTP server")
 
-	if err := http.ListenAndServe(address, router); err != nil {
+	if err := http.ListenAndServe(address, httpRouter); err != nil {
 		return fmt.Errorf("serve HTTP: %w", err)
 	}
 

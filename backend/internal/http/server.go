@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
@@ -15,13 +16,22 @@ type DiscoveryService interface {
 	Discover(context.Context) ([]models.MinecraftServer, error)
 }
 
-type Server struct {
-	discovery DiscoveryService
+type RoutingService interface {
+	Routes(context.Context) ([]routing.Route, error)
 }
 
-func NewServer(discovery DiscoveryService) *Server {
+type Server struct {
+	discovery DiscoveryService
+	routing   RoutingService
+}
+
+func NewServer(
+	discovery DiscoveryService,
+	routing RoutingService,
+) *Server {
 	return &Server{
 		discovery: discovery,
+		routing:   routing,
 	}
 }
 
@@ -30,6 +40,7 @@ func (s *Server) Router() http.Handler {
 
 	router.Get("/health", healthHandler)
 	router.Get("/api/v1/servers", s.listServers)
+	router.Get("/api/v1/routes", s.listRoutes)
 
 	return router
 }
@@ -43,7 +54,10 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (s *Server) listServers(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listServers(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	servers, err := s.discovery.Discover(r.Context())
 	if err != nil {
 		slog.Error("discover Minecraft servers", "error", err)
@@ -59,6 +73,28 @@ func (s *Server) listServers(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"servers": servers,
+	})
+}
+
+func (s *Server) listRoutes(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	routes, err := s.routing.Routes(r.Context())
+	if err != nil {
+		slog.Error("generate Minecraft routes", "error", err)
+
+		writeJSONError(
+			w,
+			http.StatusInternalServerError,
+			"failed to generate Minecraft routes",
+		)
+
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"routes": routes,
 	})
 }
 
