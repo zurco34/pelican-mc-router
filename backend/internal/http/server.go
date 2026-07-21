@@ -1,37 +1,23 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-
-	routing "github.com/zurco34/pelican-mc-router/internal/router"
-	"github.com/zurco34/pelican-mc-router/pkg/models"
+	"github.com/zurco34/pelican-mc-router/internal/runtime"
 )
 
-type DiscoveryService interface {
-	Discover(context.Context) ([]models.MinecraftServer, error)
-}
-
-type RoutingService interface {
-	Routes(context.Context) ([]routing.Route, error)
-}
-
 type Server struct {
-	discovery DiscoveryService
-	routing   RoutingService
+	runtime *runtime.Manager
 }
 
 func NewServer(
-	discovery DiscoveryService,
-	routing RoutingService,
+	runtimeManager *runtime.Manager,
 ) *Server {
 	return &Server{
-		discovery: discovery,
-		routing:   routing,
+		runtime: runtimeManager,
 	}
 }
 
@@ -58,7 +44,17 @@ func (s *Server) listServers(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	servers, err := s.discovery.Discover(r.Context())
+	discovery := s.runtime.Discovery()
+	if discovery == nil {
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"runtime services are not available",
+		)
+		return
+	}
+
+	servers, err := discovery.Discover(r.Context())
 	if err != nil {
 		slog.Error("discover Minecraft servers", "error", err)
 
@@ -80,7 +76,17 @@ func (s *Server) listRoutes(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	routes, err := s.routing.Routes(r.Context())
+	routingService := s.runtime.Routing()
+	if routingService == nil {
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"runtime services are not available",
+		)
+		return
+	}
+
+	routes, err := routingService.Routes(r.Context())
 	if err != nil {
 		slog.Error("generate Minecraft routes", "error", err)
 

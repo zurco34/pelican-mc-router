@@ -11,6 +11,7 @@ import (
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
 	"github.com/zurco34/pelican-mc-router/internal/router"
+	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
@@ -40,10 +41,13 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("create routing service: %w", err)
 	}
-
-	httpRouter := api.NewServer(
+	runtimeManager := runtime.New()
+	runtimeManager.Set(
 		discoveryService,
 		routingService,
+	)
+	httpRouter := api.NewServer(
+		runtimeManager,
 	).Router()
 
 	address := serverAddress(cfg.Server)

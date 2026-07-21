@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
+	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
@@ -33,8 +34,19 @@ func (f *fakeRoutingService) Routes(
 ) ([]routing.Route, error) {
 	return f.routes, f.err
 }
+
+func newTestServer(
+	discovery runtime.DiscoveryService,
+	routingService runtime.RoutingService,
+) *Server {
+	manager := runtime.New()
+	manager.Set(discovery, routingService)
+
+	return NewServer(manager)
+}
+
 func TestHealthHandler(t *testing.T) {
-	server := NewServer(
+	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
 	)
@@ -84,8 +96,7 @@ func TestListServers(t *testing.T) {
 		},
 	}
 
-	server := NewServer(discovery, &fakeRoutingService{})
-
+	server := newTestServer(discovery, &fakeRoutingService{})
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/servers",
@@ -153,7 +164,7 @@ func TestListServersReturnsInternalServerError(t *testing.T) {
 		err: errors.New("Pelican unavailable"),
 	}
 
-	server := NewServer(discovery, &fakeRoutingService{})
+	server := newTestServer(discovery, &fakeRoutingService{})
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -192,7 +203,7 @@ func TestListServersReturnsInternalServerError(t *testing.T) {
 }
 
 func TestUnknownRouteReturnsNotFound(t *testing.T) {
-	server := NewServer(
+	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
 	)
@@ -228,11 +239,10 @@ func TestListRoutes(t *testing.T) {
 		},
 	}
 
-	server := NewServer(
+	server := newTestServer(
 		&fakeDiscoveryService{},
 		routingService,
 	)
-
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/api/v1/routes",
@@ -315,7 +325,7 @@ func TestListRoutesReturnsInternalServerError(t *testing.T) {
 		err: errors.New("route generation failed"),
 	}
 
-	server := NewServer(
+	server := newTestServer(
 		&fakeDiscoveryService{},
 		routingService,
 	)
@@ -347,6 +357,85 @@ func TestListRoutesReturnsInternalServerError(t *testing.T) {
 	}
 
 	const expectedMessage = "failed to generate Minecraft routes"
+
+	if response.Error != expectedMessage {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expectedMessage,
+		)
+	}
+}
+func TestListServersReturnsServiceUnavailableWhenRuntimeIsEmpty(t *testing.T) {
+	manager := runtime.New()
+	server := NewServer(manager)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/servers",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusServiceUnavailable,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expectedMessage = "runtime services are not available"
+
+	if response.Error != expectedMessage {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expectedMessage,
+		)
+	}
+}
+
+func TestListRoutesReturnsServiceUnavailableWhenRuntimeIsEmpty(t *testing.T) {
+	manager := runtime.New()
+	server := NewServer(manager)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/routes",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusServiceUnavailable,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expectedMessage = "runtime services are not available"
 
 	if response.Error != expectedMessage {
 		t.Errorf(
