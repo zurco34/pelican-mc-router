@@ -18,6 +18,9 @@ func TestConfigValidateInfrastructure(t *testing.T) {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Infrared: InfraredConfig{
+			ProxiesPath: "/etc/infrared/proxies",
+		},
 	}
 
 	if err := cfg.ValidateInfrastructure(); err != nil {
@@ -38,6 +41,9 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Infrared: InfraredConfig{
+			ProxiesPath: "/etc/infrared/proxies",
+		},
 	}
 
 	cfg.Pelican.URL = ""
@@ -51,6 +57,23 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 		)
 	}
 }
+
+func TestConfigValidateInfrastructureRejectsMissingInfraredProxiesPath(
+	t *testing.T,
+) {
+	cfg := validConfig()
+	cfg.Infrared.ProxiesPath = "   "
+
+	err := cfg.ValidateInfrastructure()
+	if !errors.Is(err, ErrMissingInfraredProxiesPath) {
+		t.Fatalf(
+			"ValidateInfrastructure() error = %v, want error %v",
+			err,
+			ErrMissingInfraredProxiesPath,
+		)
+	}
+}
+
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name    string

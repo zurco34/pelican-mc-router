@@ -8,13 +8,14 @@ import (
 )
 
 var (
-	ErrInvalidServerPort        = errors.New("server port must be between 1 and 65535")
-	ErrMissingPelicanURL        = errors.New("pelican URL is required")
-	ErrInvalidPelicanURL        = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
-	ErrMissingPelicanAPIKey     = errors.New("pelican API key is required")
-	ErrInvalidPelicanTimeout    = errors.New("pelican timeout must be greater than zero")
-	ErrInvalidDiscoveryInterval = errors.New("discovery interval must be greater than zero")
-	ErrMissingRouterDomain      = errors.New("router domain is required")
+	ErrInvalidServerPort          = errors.New("server port must be between 1 and 65535")
+	ErrMissingPelicanURL          = errors.New("pelican URL is required")
+	ErrInvalidPelicanURL          = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
+	ErrMissingPelicanAPIKey       = errors.New("pelican API key is required")
+	ErrInvalidPelicanTimeout      = errors.New("pelican timeout must be greater than zero")
+	ErrInvalidDiscoveryInterval   = errors.New("discovery interval must be greater than zero")
+	ErrMissingRouterDomain        = errors.New("router domain is required")
+	ErrMissingInfraredProxiesPath = errors.New("infrared proxies path is required")
 )
 
 var ErrMissingDatabasePath = errors.New("database path is required")
@@ -33,6 +34,13 @@ func (c Config) ValidateInfrastructure() error {
 		validationErrors = append(
 			validationErrors,
 			ErrMissingDatabasePath,
+		)
+	}
+
+	if strings.TrimSpace(c.Infrared.ProxiesPath) == "" {
+		validationErrors = append(
+			validationErrors,
+			ErrMissingInfraredProxiesPath,
 		)
 	}
 
