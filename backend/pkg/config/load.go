@@ -58,8 +58,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("router.backend", "infrared")
 
 	v.SetDefault("infrared.proxies_path", "/etc/infrared/proxies")
-	v.SetDefault("infrared.reload_signal", "SIGHUP")
-
+	v.SetDefault(
+		"infrared.reload_marker_path",
+		"/etc/infrared/control/infrared.reload",
+	)
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
 }

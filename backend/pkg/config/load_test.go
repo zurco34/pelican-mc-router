@@ -61,6 +61,13 @@ func TestLoadDefaults(t *testing.T) {
 			"/etc/infrared/proxies",
 		)
 	}
+	if cfg.Infrared.ReloadMarkerPath != "/etc/infrared/control/infrared.reload" {
+		t.Errorf(
+			"Infrared.ReloadMarkerPath = %q, want %q",
+			cfg.Infrared.ReloadMarkerPath,
+			"/etc/infrared/control/infrared.reload",
+		)
+	}
 }
 
 func TestLoadFromFile(t *testing.T) {
@@ -89,7 +96,7 @@ router:
 
 infrared:
   proxies_path: "/tmp/infrared/proxies"
-  reload_signal: "SIGUSR1"
+  reload_marker_path: "/tmp/infrared/control/infrared.reload"
 
 logging:
   level: "debug"
@@ -165,6 +172,14 @@ database:
 			"Infrared.ProxiesPath = %q, want %q",
 			cfg.Infrared.ProxiesPath,
 			"/tmp/infrared/proxies",
+		)
+	}
+
+	if cfg.Infrared.ReloadMarkerPath != "/tmp/infrared/control/infrared.reload" {
+		t.Errorf(
+			"Infrared.ReloadMarkerPath = %q, want %q",
+			cfg.Infrared.ReloadMarkerPath,
+			"/tmp/infrared/control/infrared.reload",
 		)
 	}
 

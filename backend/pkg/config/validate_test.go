@@ -19,7 +19,8 @@ func TestConfigValidateInfrastructure(t *testing.T) {
 			Interval: 30 * time.Second,
 		},
 		Infrared: InfraredConfig{
-			ProxiesPath: "/etc/infrared/proxies",
+			ProxiesPath:      "/etc/infrared/proxies",
+			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
 		},
 	}
 
@@ -42,7 +43,8 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 			Interval: 30 * time.Second,
 		},
 		Infrared: InfraredConfig{
-			ProxiesPath: "/etc/infrared/proxies",
+			ProxiesPath:      "/etc/infrared/proxies",
+			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
 		},
 	}
 
@@ -70,6 +72,22 @@ func TestConfigValidateInfrastructureRejectsMissingInfraredProxiesPath(
 			"ValidateInfrastructure() error = %v, want error %v",
 			err,
 			ErrMissingInfraredProxiesPath,
+		)
+	}
+}
+
+func TestConfigValidateInfrastructureRejectsMissingInfraredReloadMarkerPath(
+	t *testing.T,
+) {
+	cfg := validConfig()
+	cfg.Infrared.ReloadMarkerPath = "   "
+
+	err := cfg.ValidateInfrastructure()
+	if !errors.Is(err, ErrMissingInfraredReloadMarkerPath) {
+		t.Fatalf(
+			"ValidateInfrastructure() error = %v, want error %v",
+			err,
+			ErrMissingInfraredReloadMarkerPath,
 		)
 	}
 }
@@ -241,8 +259,8 @@ func validConfig() Config {
 			Domain:  "mc.example.com",
 		},
 		Infrared: InfraredConfig{
-			ProxiesPath:  "/etc/infrared/proxies",
-			ReloadSignal: "SIGHUP",
+			ProxiesPath:      "/etc/infrared/proxies",
+			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
 		},
 		Logging: LoggingConfig{
 			Level:  "info",

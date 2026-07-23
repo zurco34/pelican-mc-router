@@ -15,8 +15,8 @@ router:
   domain: ""
 
 infrared:
-  config_path: "/etc/infrared/config.json"
-  reload_signal: "SIGHUP"
+  proxies_path: "/etc/infrared/proxies"
+  reload_marker_path: "/etc/infrared/control/infrared.reload"
 
 logging:
   level: "info"
