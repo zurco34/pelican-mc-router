@@ -47,9 +47,20 @@ func TestLoadDefaults(t *testing.T) {
 			30*time.Second,
 		)
 	}
+	if cfg.Database.Path != "./data/pelican-mc-router.db" {
+		t.Errorf(
+			"Database.Path = %q, want %q",
+			cfg.Database.Path,
+			"./data/pelican-mc-router.db",
+		)
+	}
 }
 
 func TestLoadFromFile(t *testing.T) {
+
+	t.Setenv("PELICAN_MC_ROUTER_PELICAN_URL", "")
+	t.Setenv("PELICAN_MC_ROUTER_ROUTER_DOMAIN", "")
+
 	directory := t.TempDir()
 
 	configContent := []byte(`
@@ -76,6 +87,9 @@ infrared:
 logging:
   level: "debug"
   format: "console"
+
+database:
+  path: "/tmp/router.db"
 `)
 
 	configPath := filepath.Join(directory, "config.yaml")
@@ -136,6 +150,13 @@ logging:
 			"Router.Domain = %q, want %q",
 			cfg.Router.Domain,
 			"mc.example.com",
+		)
+	}
+	if cfg.Database.Path != "/tmp/router.db" {
+		t.Errorf(
+			"Database.Path = %q, want %q",
+			cfg.Database.Path,
+			"/tmp/router.db",
 		)
 	}
 }

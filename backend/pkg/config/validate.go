@@ -17,7 +17,9 @@ var (
 	ErrMissingRouterDomain      = errors.New("router domain is required")
 )
 
-func (c Config) Validate() error {
+var ErrMissingDatabasePath = errors.New("database path is required")
+
+func (c Config) ValidateInfrastructure() error {
 	var validationErrors []error
 
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
@@ -27,8 +29,11 @@ func (c Config) Validate() error {
 		)
 	}
 
-	if err := validatePelican(c.Pelican); err != nil {
-		validationErrors = append(validationErrors, err)
+	if strings.TrimSpace(c.Database.Path) == "" {
+		validationErrors = append(
+			validationErrors,
+			ErrMissingDatabasePath,
+		)
 	}
 
 	if c.Discovery.Interval <= 0 {
@@ -36,6 +41,20 @@ func (c Config) Validate() error {
 			validationErrors,
 			ErrInvalidDiscoveryInterval,
 		)
+	}
+
+	return errors.Join(validationErrors...)
+}
+
+func (c Config) Validate() error {
+	var validationErrors []error
+
+	if err := c.ValidateInfrastructure(); err != nil {
+		validationErrors = append(validationErrors, err)
+	}
+
+	if err := validatePelican(c.Pelican); err != nil {
+		validationErrors = append(validationErrors, err)
 	}
 
 	if strings.TrimSpace(c.Router.Domain) == "" {

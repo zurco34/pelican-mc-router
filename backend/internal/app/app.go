@@ -1,16 +1,20 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 
 	"github.com/rs/zerolog/log"
-	"github.com/zurco34/pelican-mc-router/internal/discovery"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
-	"github.com/zurco34/pelican-mc-router/internal/router"
+	"github.com/zurco34/pelican-mc-router/internal/runtime"
+	"github.com/zurco34/pelican-mc-router/internal/scheduler"
+	"github.com/zurco34/pelican-mc-router/internal/settings"
+	"github.com/zurco34/pelican-mc-router/internal/setup"
+	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
@@ -19,31 +23,65 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}
-	if err := cfg.Validate(); err != nil {
+	if err := cfg.ValidateInfrastructure(); err != nil {
 		return fmt.Errorf("validate configuration: %w", err)
 	}
-	pelicanClient, err := pelican.NewClient(pelican.Config{
-		BaseURL: cfg.Pelican.URL,
-		APIKey:  cfg.Pelican.APIKey,
-		Timeout: cfg.Pelican.Timeout,
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: cfg.Database.Path,
 	})
 	if err != nil {
-		return fmt.Errorf("create Pelican client: %w", err)
+		return fmt.Errorf("open SQLite database: %w", err)
 	}
+	defer db.Close()
 
-	discoveryService := discovery.New(pelicanClient)
+	settingsStore := settings.NewStore(db)
 
-	routingService, err := router.New(
-		discoveryService,
-		cfg.Router.Domain,
+	validator := setup.NewPelicanValidator(
+		setup.PelicanClientFactoryFunc(
+			func(cfg pelican.Config) (setup.PelicanNodeLister, error) {
+				return pelican.NewClient(cfg)
+			},
+		),
+		cfg.Pelican.Timeout,
 	)
-	if err != nil {
-		return fmt.Errorf("create routing service: %w", err)
+
+	runtimeManager := runtime.New()
+
+	refresher := runtime.NewRefreshTask(
+		settingsStore,
+		cfg.Pelican.Timeout,
+		runtimeManager,
+	)
+
+	setupService := setup.NewService(
+		settingsStore,
+		validator,
+		refresher,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := refresher.Refresh(ctx); err != nil {
+		return fmt.Errorf("initialize runtime: %w", err)
 	}
+
+	runtimeScheduler := scheduler.NewTicker()
+
+	schedulerErrors := make(chan error, 1)
+
+	go func() {
+		schedulerErrors <- runtimeScheduler.Run(
+			ctx,
+			cfg.Discovery.Interval,
+			refresher,
+		)
+	}()
 
 	httpRouter := api.NewServer(
-		discoveryService,
-		routingService,
+		runtimeManager,
+		setupService,
 	).Router()
 
 	address := serverAddress(cfg.Server)
@@ -52,11 +90,31 @@ func Run() error {
 		Str("address", address).
 		Msg("starting HTTP server")
 
-	if err := http.ListenAndServe(address, httpRouter); err != nil {
-		return fmt.Errorf("serve HTTP: %w", err)
-	}
+	serverErrors := make(chan error, 1)
 
-	return nil
+	go func() {
+		serverErrors <- http.ListenAndServe(address, httpRouter)
+	}()
+
+	select {
+	case err := <-serverErrors:
+		cancel()
+
+		if err != nil {
+			return fmt.Errorf("serve HTTP: %w", err)
+		}
+
+		return nil
+
+	case err := <-schedulerErrors:
+		cancel()
+
+		if err != nil {
+			return fmt.Errorf("run runtime scheduler: %w", err)
+		}
+
+		return nil
+	}
 }
 
 func serverAddress(cfg config.ServerConfig) string {
