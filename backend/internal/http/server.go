@@ -182,13 +182,7 @@ func (s *Server) configureSetup(
 	}
 
 	if err := s.setup.Setup(r.Context(), setupSettings); err != nil {
-		if errors.Is(err, setup.ErrAlreadyConfigured) {
-			writeJSONError(
-				w,
-				http.StatusConflict,
-				"setup has already been completed",
-			)
-
+		if writeSetupError(w, err) {
 			return
 		}
 
@@ -246,6 +240,10 @@ func (s *Server) updateSettings(
 	}
 
 	if err := s.setup.Update(r.Context(), updatedSettings); err != nil {
+		if writeSetupError(w, err) {
+			return
+		}
+
 		slog.Error("update settings", "error", err)
 
 		writeJSONError(
@@ -256,7 +254,6 @@ func (s *Server) updateSettings(
 
 		return
 	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -285,4 +282,30 @@ func writeSetupIncomplete(w http.ResponseWriter) {
 		http.StatusServiceUnavailable,
 		"setup has not been completed",
 	)
+}
+
+func writeSetupError(
+	w http.ResponseWriter,
+	err error,
+) bool {
+	switch {
+	case errors.Is(err, setup.ErrAlreadyConfigured):
+		writeJSONError(
+			w,
+			http.StatusConflict,
+			"setup has already been completed",
+		)
+
+	case errors.Is(err, setup.ErrMissingRouterDomain):
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"router domain is required",
+		)
+
+	default:
+		return false
+	}
+
+	return true
 }

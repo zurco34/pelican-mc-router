@@ -12,6 +12,7 @@ import (
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
+	"github.com/zurco34/pelican-mc-router/internal/setup"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
@@ -939,6 +940,113 @@ func TestConfigureSetupReturnsInternalServerError(t *testing.T) {
 		)
 	}
 }
+
+func TestUpdateSettingsReturnsBadRequestForMissingRouterDomain(
+	t *testing.T,
+) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{
+			err: setup.ErrMissingRouterDomain,
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/settings",
+		strings.NewReader(`{
+			"pelican_url": "https://panel.example.com",
+			"pelican_api_key": "key",
+			"router_domain": ""
+		}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusBadRequest,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expected = "router domain is required"
+
+	if response.Error != expected {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expected,
+		)
+	}
+}
+
+func TestConfigureSetupReturnsConflictWhenAlreadyConfigured(
+	t *testing.T,
+) {
+	server := newTestServer(
+		&fakeDiscoveryService{},
+		&fakeRoutingService{},
+		&fakeSetupService{
+			err: setup.ErrAlreadyConfigured,
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/setup",
+		strings.NewReader(`{
+			"pelican_url": "https://panel.example.com",
+			"pelican_api_key": "key",
+			"router_domain": "mc.example.com"
+		}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf(
+			"status code = %d, want %d",
+			recorder.Code,
+			http.StatusConflict,
+		)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const expected = "setup has already been completed"
+
+	if response.Error != expected {
+		t.Errorf(
+			"error = %q, want %q",
+			response.Error,
+			expected,
+		)
+	}
+}
+
 func TestListServersSetupIncomplete(t *testing.T) {
 	server := newTestServer(
 		nil,
