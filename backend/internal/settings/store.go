@@ -24,6 +24,7 @@ func NewStore(db *sql.DB) *Store {
 		db: db,
 	}
 }
+
 func (s *Store) Set(key, value string) error {
 	return setValue(s.db, key, value)
 }
@@ -43,6 +44,7 @@ func setValue(
 
 	return err
 }
+
 func (s *Store) Get(key string) (string, error) {
 	var value string
 
@@ -59,6 +61,7 @@ func (s *Store) Get(key string) (string, error) {
 
 	return value, nil
 }
+
 func (s *Store) IsSetupComplete() (bool, error) {
 	value, err := s.Get(KeySetupCompleted)
 	if errors.Is(err, ErrNotFound) {
@@ -81,21 +84,48 @@ func (s *Store) IsSetupComplete() (bool, error) {
 func (s *Store) SetSetupComplete(complete bool) error {
 	return s.Set(KeySetupCompleted, strconv.FormatBool(complete))
 }
-func (s *Store) Save(settings Settings) error {
-	if err := s.Set(KeyPelicanURL, settings.PelicanURL); err != nil {
-		return fmt.Errorf("save %q: %w", KeyPelicanURL, err)
+
+func (s *Store) Save(value Settings) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin settings transaction: %w", err)
 	}
 
-	if err := s.Set(KeyPelicanAPIKey, settings.PelicanAPIKey); err != nil {
-		return fmt.Errorf("save %q: %w", KeyPelicanAPIKey, err)
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	values := []struct {
+		key   string
+		value string
+	}{
+		{
+			key:   KeyPelicanURL,
+			value: value.PelicanURL,
+		},
+		{
+			key:   KeyPelicanAPIKey,
+			value: value.PelicanAPIKey,
+		},
+		{
+			key:   KeyRouterDomain,
+			value: value.RouterDomain,
+		},
 	}
 
-	if err := s.Set(KeyRouterDomain, settings.RouterDomain); err != nil {
-		return fmt.Errorf("save %q: %w", KeyRouterDomain, err)
+	for _, setting := range values {
+		if err := setValue(tx, setting.key, setting.value); err != nil {
+			return fmt.Errorf("save %q: %w", setting.key, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit settings transaction: %w", err)
 	}
 
 	return nil
 }
+
 func (s *Store) Load() (Settings, error) {
 	var result Settings
 
@@ -119,6 +149,7 @@ func (s *Store) Load() (Settings, error) {
 
 	return result, nil
 }
+
 func (s *Store) SaveSetup(value Settings) error {
 	tx, err := s.db.Begin()
 	if err != nil {

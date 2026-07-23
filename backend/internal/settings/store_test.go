@@ -281,6 +281,69 @@ func TestStoreSaveSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreSaveRollsBackWhenWriteFails(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{
+		Path: filepath.Join(t.TempDir(), "router.db"),
+	})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	store := NewStore(db)
+
+	original := Settings{
+		PelicanURL:    "https://old-panel.example.com",
+		PelicanAPIKey: "old-api-key",
+		RouterDomain:  "old.mc.example.com",
+	}
+
+	if err := store.Save(original); err != nil {
+		t.Fatalf("save original settings: %v", err)
+	}
+
+	_, err = db.Exec(`
+		CREATE TRIGGER fail_router_domain_update
+		BEFORE UPDATE ON settings
+		WHEN NEW.key = 'router.domain'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced write failure');
+		END
+	`)
+	if err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	updated := Settings{
+		PelicanURL:    "https://new-panel.example.com",
+		PelicanAPIKey: "new-api-key",
+		RouterDomain:  "new.mc.example.com",
+	}
+
+	err = store.Save(updated)
+	if err == nil {
+		t.Fatal("Save() error = nil, want an error")
+	}
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got != original {
+		t.Fatalf(
+			"settings after failed Save() = %#v, want %#v",
+			got,
+			original,
+		)
+	}
+}
+
 func TestStoreLoadSettings(t *testing.T) {
 	t.Parallel()
 
