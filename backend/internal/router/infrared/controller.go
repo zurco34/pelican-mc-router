@@ -58,6 +58,8 @@ func (c *Controller) Reconcile(
 		)
 	}
 
+	desiredFiles := make(map[string]struct{}, len(routes))
+
 	for _, route := range routes {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("infrared: reconcile routes: %w", err)
@@ -71,6 +73,8 @@ func (c *Controller) Reconcile(
 				err,
 			)
 		}
+
+		desiredFiles[filename] = struct{}{}
 
 		data, err := Render(route)
 		if err != nil {
@@ -92,6 +96,14 @@ func (c *Controller) Reconcile(
 		}
 	}
 
+	if err := removeStaleProxyConfigurations(
+		ctx,
+		c.directory,
+		desiredFiles,
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -110,6 +122,53 @@ func proxyFilename(serverID string) (string, error) {
 	}
 
 	return serverID + ".yml", nil
+}
+
+func removeStaleProxyConfigurations(
+	ctx context.Context,
+	directory string,
+	desiredFiles map[string]struct{},
+) error {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf(
+			"infrared: read proxy directory %q: %w",
+			directory,
+			err,
+		)
+	}
+
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("infrared: reconcile routes: %w", err)
+		}
+
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+
+		if filepath.Ext(name) != ".yml" {
+			continue
+		}
+
+		if _, exists := desiredFiles[name]; exists {
+			continue
+		}
+
+		path := filepath.Join(directory, name)
+
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf(
+				"infrared: remove stale proxy configuration %q: %w",
+				path,
+				err,
+			)
+		}
+	}
+
+	return nil
 }
 
 func writeFileAtomic(

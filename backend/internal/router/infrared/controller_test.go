@@ -245,3 +245,67 @@ func TestControllerReconcileReplacesExistingConfiguration(t *testing.T) {
 		)
 	}
 }
+
+func TestControllerReconcileRemovesStaleProxyConfigurations(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+
+	stalePath := filepath.Join(directory, "stale-server.yml")
+	if err := os.WriteFile(
+		stalePath,
+		[]byte("stale configuration\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write stale proxy configuration: %v", err)
+	}
+
+	unmanagedPath := filepath.Join(directory, "README.txt")
+	if err := os.WriteFile(
+		unmanagedPath,
+		[]byte("keep this file\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write unmanaged file: %v", err)
+	}
+
+	controller, err := NewController(Config{
+		Directory: directory,
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	route := router.Route{
+		ServerID: "active-server",
+		Hostname: "active.mc.example.com",
+		Backend: router.Backend{
+			Host: "10.0.0.25",
+			Port: 25565,
+		},
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{route},
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if _, err := os.Stat(stalePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(
+			"stale proxy configuration still exists; Stat() error = %v",
+			err,
+		)
+	}
+
+	activePath := filepath.Join(directory, "active-server.yml")
+	if _, err := os.Stat(activePath); err != nil {
+		t.Fatalf("active proxy configuration missing: %v", err)
+	}
+
+	if _, err := os.Stat(unmanagedPath); err != nil {
+		t.Fatalf("unmanaged file was removed: %v", err)
+	}
+}
