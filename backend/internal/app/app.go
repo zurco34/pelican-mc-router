@@ -52,6 +52,7 @@ func Run() error {
 		settingsStore,
 		cfg.Pelican.Timeout,
 		runtimeManager,
+		nil,
 	)
 
 	setupService := setup.NewService(
