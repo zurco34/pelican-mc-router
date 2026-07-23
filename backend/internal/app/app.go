@@ -10,6 +10,8 @@ import (
 	"github.com/rs/zerolog/log"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
+	"github.com/zurco34/pelican-mc-router/internal/router"
+	"github.com/zurco34/pelican-mc-router/internal/router/infrared"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/scheduler"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -48,11 +50,33 @@ func Run() error {
 
 	runtimeManager := runtime.New()
 
+	infraredController, err := infrared.NewController(
+		infrared.Config{
+			Directory: cfg.Infrared.ProxiesPath,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"create Infrared controller: %w",
+			err,
+		)
+	}
+
+	routeSynchronizer, err := router.NewSynchronizer(
+		infraredController,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"create route synchronizer: %w",
+			err,
+		)
+	}
+
 	refresher := runtime.NewRefreshTask(
 		settingsStore,
 		cfg.Pelican.Timeout,
 		runtimeManager,
-		nil,
+		routeSynchronizer,
 	)
 
 	setupService := setup.NewService(
