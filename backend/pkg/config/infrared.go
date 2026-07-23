@@ -1,6 +1,6 @@
 package config
 
 type InfraredConfig struct {
-	ConfigPath   string `mapstructure:"config_path"`
+	ProxiesPath  string `mapstructure:"proxies_path"`
 	ReloadSignal string `mapstructure:"reload_signal"`
 }

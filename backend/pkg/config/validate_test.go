@@ -218,7 +218,7 @@ func validConfig() Config {
 			Domain:  "mc.example.com",
 		},
 		Infrared: InfraredConfig{
-			ConfigPath:   "/etc/infrared/config.json",
+			ProxiesPath:  "/etc/infrared/proxies",
 			ReloadSignal: "SIGHUP",
 		},
 		Logging: LoggingConfig{

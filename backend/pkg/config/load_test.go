@@ -54,6 +54,13 @@ func TestLoadDefaults(t *testing.T) {
 			"./data/pelican-mc-router.db",
 		)
 	}
+	if cfg.Infrared.ProxiesPath != "/etc/infrared/proxies" {
+		t.Errorf(
+			"Infrared.ProxiesPath = %q, want %q",
+			cfg.Infrared.ProxiesPath,
+			"/etc/infrared/proxies",
+		)
+	}
 }
 
 func TestLoadFromFile(t *testing.T) {
@@ -81,7 +88,7 @@ router:
   domain: "mc.example.com"
 
 infrared:
-  config_path: "/tmp/infrared.json"
+  proxies_path: "/tmp/infrared/proxies"
   reload_signal: "SIGUSR1"
 
 logging:
@@ -152,6 +159,15 @@ database:
 			"mc.example.com",
 		)
 	}
+
+	if cfg.Infrared.ProxiesPath != "/tmp/infrared/proxies" {
+		t.Errorf(
+			"Infrared.ProxiesPath = %q, want %q",
+			cfg.Infrared.ProxiesPath,
+			"/tmp/infrared/proxies",
+		)
+	}
+
 	if cfg.Database.Path != "/tmp/router.db" {
 		t.Errorf(
 			"Database.Path = %q, want %q",
