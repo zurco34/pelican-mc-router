@@ -40,7 +40,7 @@ func TestControllerReconcileWritesProxyConfiguration(t *testing.T) {
 		t.Fatalf("Reconcile() error = %v", err)
 	}
 
-	path := filepath.Join(directory, "server-123.yml")
+	path := filepath.Join(directory, "pelican-mc-router-server-123.yml")
 
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -72,11 +72,11 @@ func TestControllerReconcileWritesProxyConfiguration(t *testing.T) {
 		)
 	}
 
-	if entries[0].Name() != "server-123.yml" {
+	if entries[0].Name() != "pelican-mc-router-server-123.yml" {
 		t.Fatalf(
 			"proxy filename = %q, want %q",
 			entries[0].Name(),
-			"server-123.yml",
+			"pelican-mc-router-server-123.yml",
 		)
 	}
 }
@@ -185,7 +185,7 @@ func TestControllerReconcileReplacesExistingConfiguration(t *testing.T) {
 		t.Fatalf("NewController() error = %v", err)
 	}
 
-	path := filepath.Join(directory, "server-123.yml")
+	path := filepath.Join(directory, "pelican-mc-router-server-123.yml")
 
 	if err := os.WriteFile(path, []byte("old configuration\n"), 0o644); err != nil {
 		t.Fatalf("write existing proxy configuration: %v", err)
@@ -238,11 +238,11 @@ func TestControllerReconcileReplacesExistingConfiguration(t *testing.T) {
 		)
 	}
 
-	if entries[0].Name() != "server-123.yml" {
+	if entries[0].Name() != "pelican-mc-router-server-123.yml" {
 		t.Fatalf(
 			"proxy directory entry = %q, want %q",
 			entries[0].Name(),
-			"server-123.yml",
+			"pelican-mc-router-server-123.yml",
 		)
 	}
 }
@@ -252,7 +252,7 @@ func TestControllerReconcileRemovesStaleProxyConfigurations(t *testing.T) {
 
 	directory := t.TempDir()
 
-	stalePath := filepath.Join(directory, "stale-server.yml")
+	stalePath := filepath.Join(directory, "pelican-mc-router-stale-server.yml")
 	if err := os.WriteFile(
 		stalePath,
 		[]byte("stale configuration\n"),
@@ -301,7 +301,7 @@ func TestControllerReconcileRemovesStaleProxyConfigurations(t *testing.T) {
 		)
 	}
 
-	activePath := filepath.Join(directory, "active-server.yml")
+	activePath := filepath.Join(directory, "pelican-mc-router-active-server.yml")
 	if _, err := os.Stat(activePath); err != nil {
 		t.Fatalf("active proxy configuration missing: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestControllerReconcileValidatesAllRoutesBeforeWriting(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	path := filepath.Join(directory, "server-123.yml")
+	path := filepath.Join(directory, "pelican-mc-router-server-123.yml")
 
 	original := []byte("original configuration\n")
 
@@ -378,7 +378,7 @@ func TestControllerReconcileRejectsDuplicateServerIDs(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	path := filepath.Join(directory, "server-123.yml")
+	path := filepath.Join(directory, "pelican-mc-router-server-123.yml")
 
 	original := []byte("original configuration\n")
 
@@ -498,8 +498,8 @@ func TestControllerReconcileCanceledContextDoesNotModifyConfigurations(
 	t.Parallel()
 
 	directory := t.TempDir()
-	existingPath := filepath.Join(directory, "existing-server.yml")
-	newPath := filepath.Join(directory, "new-server.yml")
+	existingPath := filepath.Join(directory, "pelican-mc-router-existing-server.yml")
+	newPath := filepath.Join(directory, "pelican-mc-router-new-server.yml")
 
 	original := []byte("original configuration\n")
 
@@ -553,6 +553,56 @@ func TestControllerReconcileCanceledContextDoesNotModifyConfigurations(
 		t.Fatalf(
 			"new proxy configuration exists after cancellation; Stat() error = %v",
 			err,
+		)
+	}
+}
+
+func TestControllerReconcilePreservesUnmanagedYAMLConfiguration(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	unmanagedPath := filepath.Join(directory, "manual-proxy.yml")
+	unmanaged := []byte("manually managed configuration\n")
+
+	if err := os.WriteFile(unmanagedPath, unmanaged, 0o644); err != nil {
+		t.Fatalf("write unmanaged proxy configuration: %v", err)
+	}
+
+	controller, err := NewController(Config{
+		Directory: directory,
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	route := router.Route{
+		ServerID: "active-server",
+		Hostname: "active.mc.example.com",
+		Backend: router.Backend{
+			Host: "10.0.0.25",
+			Port: 25565,
+		},
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{route},
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	got, err := os.ReadFile(unmanagedPath)
+	if err != nil {
+		t.Fatalf("read unmanaged proxy configuration: %v", err)
+	}
+
+	if string(got) != string(unmanaged) {
+		t.Fatalf(
+			"unmanaged proxy configuration changed:\n%s",
+			string(got),
 		)
 	}
 }

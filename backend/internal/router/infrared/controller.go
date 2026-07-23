@@ -12,6 +12,8 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/router"
 )
 
+const managedProxyPrefix = "pelican-mc-router-"
+
 var (
 	errEmptyDirectory = errors.New(
 		"infrared: proxy directory must not be empty",
@@ -166,7 +168,7 @@ func proxyFilename(serverID string) (string, error) {
 		return "", errInvalidServerID
 	}
 
-	return serverID + ".yml", nil
+	return managedProxyPrefix + serverID + ".yml", nil
 }
 
 func removeStaleProxyConfigurations(
@@ -194,7 +196,8 @@ func removeStaleProxyConfigurations(
 
 		name := entry.Name()
 
-		if filepath.Ext(name) != ".yml" {
+		if !strings.HasPrefix(name, managedProxyPrefix) ||
+			filepath.Ext(name) != ".yml" {
 			continue
 		}
 
