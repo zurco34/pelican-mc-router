@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/zurco34/pelican-mc-router/internal/router"
 )
@@ -433,5 +434,60 @@ func TestControllerReconcileRejectsDuplicateServerIDs(t *testing.T) {
 			"proxy configuration changed after duplicate ID:\n%s",
 			string(got),
 		)
+	}
+}
+
+func TestControllerReconcileSerializesCalls(t *testing.T) {
+	t.Parallel()
+
+	controller, err := NewController(Config{
+		Directory: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	controller.mu.Lock()
+	locked := true
+
+	t.Cleanup(func() {
+		if locked {
+			controller.mu.Unlock()
+		}
+	})
+
+	started := make(chan struct{})
+	finished := make(chan error, 1)
+
+	go func() {
+		close(started)
+
+		finished <- controller.Reconcile(
+			context.Background(),
+			nil,
+		)
+	}()
+
+	<-started
+
+	select {
+	case err := <-finished:
+		t.Fatalf(
+			"Reconcile() completed while controller lock was held; error = %v",
+			err,
+		)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	controller.mu.Unlock()
+	locked = false
+
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatalf("Reconcile() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Reconcile() did not complete after controller lock was released")
 	}
 }

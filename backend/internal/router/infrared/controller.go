@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/zurco34/pelican-mc-router/internal/router"
 )
@@ -31,9 +32,9 @@ type Config struct {
 }
 
 type Controller struct {
+	mu        sync.Mutex
 	directory string
 }
-
 type renderedProxyConfiguration struct {
 	filename string
 	data     []byte
@@ -54,6 +55,8 @@ func (c *Controller) Reconcile(
 	ctx context.Context,
 	routes []router.Route,
 ) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("infrared: reconcile routes: %w", err)
 	}
