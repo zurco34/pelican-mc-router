@@ -491,3 +491,68 @@ func TestControllerReconcileSerializesCalls(t *testing.T) {
 		t.Fatal("Reconcile() did not complete after controller lock was released")
 	}
 }
+
+func TestControllerReconcileCanceledContextDoesNotModifyConfigurations(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	existingPath := filepath.Join(directory, "existing-server.yml")
+	newPath := filepath.Join(directory, "new-server.yml")
+
+	original := []byte("original configuration\n")
+
+	if err := os.WriteFile(existingPath, original, 0o644); err != nil {
+		t.Fatalf("write existing proxy configuration: %v", err)
+	}
+
+	controller, err := NewController(Config{
+		Directory: directory,
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	routes := []router.Route{
+		{
+			ServerID: "new-server",
+			Hostname: "new.mc.example.com",
+			Backend: router.Backend{
+				Host: "10.0.0.25",
+				Port: 25565,
+			},
+		},
+	}
+
+	err = controller.Reconcile(ctx, routes)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf(
+			"Reconcile() error = %v, want %v",
+			err,
+			context.Canceled,
+		)
+	}
+
+	got, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatalf("read existing proxy configuration: %v", err)
+	}
+
+	if string(got) != string(original) {
+		t.Fatalf(
+			"existing proxy configuration changed after cancellation:\n%s",
+			string(got),
+		)
+	}
+
+	if _, err := os.Stat(newPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(
+			"new proxy configuration exists after cancellation; Stat() error = %v",
+			err,
+		)
+	}
+}
