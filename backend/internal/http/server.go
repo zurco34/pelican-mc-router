@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
+	"github.com/zurco34/pelican-mc-router/internal/setup"
 )
 
 type SetupService interface {
@@ -181,6 +182,16 @@ func (s *Server) configureSetup(
 	}
 
 	if err := s.setup.Setup(r.Context(), setupSettings); err != nil {
+		if errors.Is(err, setup.ErrAlreadyConfigured) {
+			writeJSONError(
+				w,
+				http.StatusConflict,
+				"setup has already been completed",
+			)
+
+			return
+		}
+
 		slog.Error("configure setup", "error", err)
 
 		writeJSONError(
@@ -258,7 +269,11 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
-func writeJSONError(w http.ResponseWriter, status int, message string) {
+func writeJSONError(
+	w http.ResponseWriter,
+	status int,
+	message string,
+) {
 	writeJSON(w, status, map[string]string{
 		"error": message,
 	})

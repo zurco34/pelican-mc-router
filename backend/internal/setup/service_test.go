@@ -326,6 +326,40 @@ func TestServiceSetup(t *testing.T) {
 
 	})
 
+	t.Run("returns already configured when setup is already complete", func(t *testing.T) {
+		store := &stubSettingsStore{
+			setupComplete: true,
+		}
+		validator := &stubPelicanValidator{}
+
+		service := NewService(
+			store,
+			validator,
+			nil,
+		)
+
+		err := service.Setup(context.Background(), settings.Settings{
+			PelicanURL:    "https://panel.example.com/api/application",
+			PelicanAPIKey: "test-api-key",
+			RouterDomain:  "mc.example.com",
+		})
+
+		if !errors.Is(err, ErrAlreadyConfigured) {
+			t.Fatalf(
+				"Setup() error = %v, want errors.Is(error, ErrAlreadyConfigured)",
+				err,
+			)
+		}
+
+		if validator.called {
+			t.Fatal("validator should not be called when setup is already complete")
+		}
+
+		if store.saved != (settings.Settings{}) {
+			t.Fatal("settings should not be persisted")
+		}
+	})
+
 }
 func TestServiceIsSetupComplete(t *testing.T) {
 	store := &stubSettingsStore{

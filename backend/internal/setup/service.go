@@ -11,6 +11,10 @@ import (
 
 var ErrMissingRouterDomain = errors.New("setup: router domain is required")
 
+var ErrAlreadyConfigured = errors.New(
+	"setup: setup has already been completed",
+)
+
 type SettingsStore interface {
 	IsSetupComplete() (bool, error)
 	Save(settings.Settings) error
@@ -99,6 +103,18 @@ func (s *Service) Setup(
 	ctx context.Context,
 	input settings.Settings,
 ) error {
+	completed, err := s.store.IsSetupComplete()
+	if err != nil {
+		return fmt.Errorf(
+			"setup: determine setup status: %w",
+			err,
+		)
+	}
+
+	if completed {
+		return ErrAlreadyConfigured
+	}
+
 	return s.saveAndRefresh(
 		ctx,
 		input,
