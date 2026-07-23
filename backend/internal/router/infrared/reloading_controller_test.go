@@ -9,19 +9,20 @@ import (
 )
 
 type reloadingTestController struct {
-	calls  int
-	routes []router.Route
-	err    error
+	calls   int
+	routes  []router.Route
+	changed bool
+	err     error
 }
 
-func (c *reloadingTestController) Reconcile(
+func (c *reloadingTestController) ReconcileChanges(
 	_ context.Context,
 	routes []router.Route,
-) error {
+) (bool, error) {
 	c.calls++
 	c.routes = append([]router.Route(nil), routes...)
 
-	return c.err
+	return c.changed, c.err
 }
 
 type reloadingTestReloader struct {
@@ -50,7 +51,9 @@ func TestReloadingControllerReloadsAfterReconciliation(t *testing.T) {
 		},
 	}
 
-	baseController := &reloadingTestController{}
+	baseController := &reloadingTestController{
+		changed: true,
+	}
 	reloader := &reloadingTestReloader{
 		controller: baseController,
 	}
@@ -97,6 +100,56 @@ func TestReloadingControllerReloadsAfterReconciliation(t *testing.T) {
 			"base Reconcile() routes = %#v, want %#v",
 			baseController.routes,
 			expected,
+		)
+	}
+}
+
+func TestReloadingControllerSkipsReloadWhenConfigurationsUnchanged(
+	t *testing.T,
+) {
+	baseController := &reloadingTestController{
+		changed: false,
+	}
+	reloader := &reloadingTestReloader{
+		controller: baseController,
+	}
+
+	controller, err := NewReloadingController(
+		baseController,
+		reloader,
+	)
+	if err != nil {
+		t.Fatalf("NewReloadingController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: "survival.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if baseController.calls != 1 {
+		t.Fatalf(
+			"base Reconcile() calls = %d, want 1",
+			baseController.calls,
+		)
+	}
+
+	if reloader.calls != 0 {
+		t.Fatalf(
+			"Reload() calls = %d, want 0",
+			reloader.calls,
 		)
 	}
 }

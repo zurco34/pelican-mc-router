@@ -606,3 +606,63 @@ func TestControllerReconcilePreservesUnmanagedYAMLConfiguration(
 		)
 	}
 }
+
+func TestControllerReconcileChangesReportsActualFilesystemChanges(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	controller, err := NewController(Config{
+		Directory: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	route := router.Route{
+		ServerID: "server-123",
+		Hostname: "survival.mc.example.com",
+		Backend: router.Backend{
+			Host: "10.0.0.25",
+			Port: 25565,
+		},
+	}
+
+	changed, err := controller.ReconcileChanges(
+		context.Background(),
+		[]router.Route{route},
+	)
+	if err != nil {
+		t.Fatalf("first ReconcileChanges() error = %v", err)
+	}
+
+	if !changed {
+		t.Fatal("first ReconcileChanges() changed = false, want true")
+	}
+
+	changed, err = controller.ReconcileChanges(
+		context.Background(),
+		[]router.Route{route},
+	)
+	if err != nil {
+		t.Fatalf("second ReconcileChanges() error = %v", err)
+	}
+
+	if changed {
+		t.Fatal("second ReconcileChanges() changed = true, want false")
+	}
+
+	route.Backend.Port = 25570
+
+	changed, err = controller.ReconcileChanges(
+		context.Background(),
+		[]router.Route{route},
+	)
+	if err != nil {
+		t.Fatalf("updated ReconcileChanges() error = %v", err)
+	}
+
+	if !changed {
+		t.Fatal("updated ReconcileChanges() changed = false, want true")
+	}
+}

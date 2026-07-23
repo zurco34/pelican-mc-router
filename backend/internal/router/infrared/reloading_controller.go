@@ -17,8 +17,11 @@ var (
 	)
 )
 
-type RouteController interface {
-	Reconcile(context.Context, []router.Route) error
+type ChangeAwareRouteController interface {
+	ReconcileChanges(
+		context.Context,
+		[]router.Route,
+	) (bool, error)
 }
 
 type Reloader interface {
@@ -26,12 +29,12 @@ type Reloader interface {
 }
 
 type ReloadingController struct {
-	controller RouteController
+	controller ChangeAwareRouteController
 	reloader   Reloader
 }
 
 func NewReloadingController(
-	controller RouteController,
+	controller ChangeAwareRouteController,
 	reloader Reloader,
 ) (*ReloadingController, error) {
 	if controller == nil {
@@ -52,11 +55,16 @@ func (c *ReloadingController) Reconcile(
 	ctx context.Context,
 	routes []router.Route,
 ) error {
-	if err := c.controller.Reconcile(ctx, routes); err != nil {
+	changed, err := c.controller.ReconcileChanges(ctx, routes)
+	if err != nil {
 		return fmt.Errorf(
 			"infrared: reconcile proxy configurations: %w",
 			err,
 		)
+	}
+
+	if !changed {
+		return nil
 	}
 
 	if err := ctx.Err(); err != nil {
