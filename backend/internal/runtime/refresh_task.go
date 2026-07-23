@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/zurco34/pelican-mc-router/internal/discovery"
@@ -17,6 +18,8 @@ type SettingsStore interface {
 }
 
 type RefreshTask struct {
+	mu sync.Mutex
+
 	store   SettingsStore
 	timeout time.Duration
 	manager *Manager
@@ -35,6 +38,9 @@ func NewRefreshTask(
 }
 
 func (r *RefreshTask) Refresh(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	discoveryService, routingService, err := r.buildRuntimeServices()
 	if err != nil {
 		return fmt.Errorf("build runtime services: %w", err)

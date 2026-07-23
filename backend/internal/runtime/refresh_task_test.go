@@ -28,6 +28,99 @@ func (f *fakeSettingsStore) Load() (settings.Settings, error) {
 	return f.settings, f.loadErr
 }
 
+type blockingSettingsStore struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (f *blockingSettingsStore) IsSetupComplete() (bool, error) {
+	f.entered <- struct{}{}
+	<-f.release
+
+	return false, nil
+}
+
+func (*blockingSettingsStore) Load() (settings.Settings, error) {
+	return settings.Settings{}, nil
+}
+
+func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
+	store := &blockingSettingsStore{
+		entered: make(chan struct{}, 2),
+		release: make(chan struct{}, 2),
+	}
+
+	task := NewRefreshTask(
+		store,
+		5*time.Second,
+		New(),
+	)
+
+	results := make(chan error, 2)
+
+	go func() {
+		results <- task.Refresh(context.Background())
+	}()
+
+	select {
+	case <-store.entered:
+	case <-time.After(time.Second):
+		t.Fatal("first refresh did not enter the settings store")
+	}
+
+	secondStarted := make(chan struct{})
+
+	go func() {
+		close(secondStarted)
+		results <- task.Refresh(context.Background())
+	}()
+
+	<-secondStarted
+
+	select {
+	case <-store.entered:
+		store.release <- struct{}{}
+		store.release <- struct{}{}
+
+		<-results
+		<-results
+
+		t.Fatal(
+			"second refresh entered the settings store " +
+				"before the first refresh completed",
+		)
+
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Allow the first refresh to complete.
+	store.release <- struct{}{}
+
+	// The second refresh should now be able to enter the store.
+	select {
+	case <-store.entered:
+	case <-time.After(time.Second):
+		t.Fatal(
+			"second refresh did not start after " +
+				"the first refresh completed",
+		)
+	}
+
+	store.release <- struct{}{}
+
+	for range 2 {
+		select {
+		case err := <-results:
+			if err != nil {
+				t.Fatalf("Refresh() error = %v", err)
+			}
+
+		case <-time.After(time.Second):
+			t.Fatal("Refresh() did not return")
+		}
+	}
+}
+
 func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 	store := &fakeSettingsStore{
 		setupComplete: false,
