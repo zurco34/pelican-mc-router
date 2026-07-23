@@ -31,6 +31,11 @@ type Controller struct {
 	directory string
 }
 
+type renderedProxyConfiguration struct {
+	filename string
+	data     []byte
+}
+
 func NewController(config Config) (*Controller, error) {
 	directory := strings.TrimSpace(config.Directory)
 	if directory == "" {
@@ -50,15 +55,12 @@ func (c *Controller) Reconcile(
 		return fmt.Errorf("infrared: reconcile routes: %w", err)
 	}
 
-	if err := os.MkdirAll(c.directory, 0o755); err != nil {
-		return fmt.Errorf(
-			"infrared: create proxy directory %q: %w",
-			c.directory,
-			err,
-		)
-	}
-
 	desiredFiles := make(map[string]struct{}, len(routes))
+	configurations := make(
+		[]renderedProxyConfiguration,
+		0,
+		len(routes),
+	)
 
 	for _, route := range routes {
 		if err := ctx.Err(); err != nil {
@@ -74,8 +76,6 @@ func (c *Controller) Reconcile(
 			)
 		}
 
-		desiredFiles[filename] = struct{}{}
-
 		data, err := Render(route)
 		if err != nil {
 			return fmt.Errorf(
@@ -85,9 +85,40 @@ func (c *Controller) Reconcile(
 			)
 		}
 
-		path := filepath.Join(c.directory, filename)
+		desiredFiles[filename] = struct{}{}
 
-		if err := writeFileAtomic(path, data, 0o644); err != nil {
+		configurations = append(
+			configurations,
+			renderedProxyConfiguration{
+				filename: filename,
+				data:     data,
+			},
+		)
+	}
+
+	if err := os.MkdirAll(c.directory, 0o755); err != nil {
+		return fmt.Errorf(
+			"infrared: create proxy directory %q: %w",
+			c.directory,
+			err,
+		)
+	}
+
+	for _, configuration := range configurations {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("infrared: reconcile routes: %w", err)
+		}
+
+		path := filepath.Join(
+			c.directory,
+			configuration.filename,
+		)
+
+		if err := writeFileAtomic(
+			path,
+			configuration.data,
+			0o644,
+		); err != nil {
 			return fmt.Errorf(
 				"infrared: write proxy configuration %q: %w",
 				path,

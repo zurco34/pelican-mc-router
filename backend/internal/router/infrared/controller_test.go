@@ -309,3 +309,66 @@ func TestControllerReconcileRemovesStaleProxyConfigurations(t *testing.T) {
 		t.Fatalf("unmanaged file was removed: %v", err)
 	}
 }
+
+func TestControllerReconcileValidatesAllRoutesBeforeWriting(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	path := filepath.Join(directory, "server-123.yml")
+
+	original := []byte("original configuration\n")
+
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatalf("write original proxy configuration: %v", err)
+	}
+
+	controller, err := NewController(Config{
+		Directory: directory,
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	routes := []router.Route{
+		{
+			ServerID: "server-123",
+			Hostname: "updated.mc.example.com",
+			Backend: router.Backend{
+				Host: "10.0.0.50",
+				Port: 25570,
+			},
+		},
+		{
+			ServerID: "",
+			Hostname: "invalid.mc.example.com",
+			Backend: router.Backend{
+				Host: "10.0.0.60",
+				Port: 25580,
+			},
+		},
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		routes,
+	)
+	if !errors.Is(err, errEmptyServerID) {
+		t.Fatalf(
+			"Reconcile() error = %v, want %v",
+			err,
+			errEmptyServerID,
+		)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read original proxy configuration: %v", err)
+	}
+
+	if string(got) != string(original) {
+		t.Fatalf(
+			"proxy configuration changed after validation failure:\n%s",
+			string(got),
+		)
+	}
+}
