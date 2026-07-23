@@ -372,3 +372,66 @@ func TestControllerReconcileValidatesAllRoutesBeforeWriting(t *testing.T) {
 		)
 	}
 }
+
+func TestControllerReconcileRejectsDuplicateServerIDs(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	path := filepath.Join(directory, "server-123.yml")
+
+	original := []byte("original configuration\n")
+
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatalf("write original proxy configuration: %v", err)
+	}
+
+	controller, err := NewController(Config{
+		Directory: directory,
+	})
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	routes := []router.Route{
+		{
+			ServerID: "server-123",
+			Hostname: "first.mc.example.com",
+			Backend: router.Backend{
+				Host: "10.0.0.25",
+				Port: 25565,
+			},
+		},
+		{
+			ServerID: " server-123 ",
+			Hostname: "second.mc.example.com",
+			Backend: router.Backend{
+				Host: "10.0.0.50",
+				Port: 25570,
+			},
+		},
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		routes,
+	)
+	if !errors.Is(err, errDuplicateServerID) {
+		t.Fatalf(
+			"Reconcile() error = %v, want %v",
+			err,
+			errDuplicateServerID,
+		)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read original proxy configuration: %v", err)
+	}
+
+	if string(got) != string(original) {
+		t.Fatalf(
+			"proxy configuration changed after duplicate ID:\n%s",
+			string(got),
+		)
+	}
+}

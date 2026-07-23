@@ -21,6 +21,9 @@ var (
 	errInvalidServerID = errors.New(
 		"infrared: route server ID must be a filename-safe value",
 	)
+	errDuplicateServerID = errors.New(
+		"infrared: duplicate route server ID",
+	)
 )
 
 type Config struct {
@@ -76,6 +79,16 @@ func (c *Controller) Reconcile(
 			)
 		}
 
+		if _, exists := desiredFiles[filename]; exists {
+			return fmt.Errorf(
+				"infrared: duplicate route for server %q: %w",
+				strings.TrimSpace(route.ServerID),
+				errDuplicateServerID,
+			)
+		}
+
+		desiredFiles[filename] = struct{}{}
+
 		data, err := Render(route)
 		if err != nil {
 			return fmt.Errorf(
@@ -84,8 +97,6 @@ func (c *Controller) Reconcile(
 				err,
 			)
 		}
-
-		desiredFiles[filename] = struct{}{}
 
 		configurations = append(
 			configurations,
