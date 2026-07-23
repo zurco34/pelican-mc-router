@@ -182,10 +182,19 @@ func TestRefreshTaskReturnsLoadError(t *testing.T) {
 		loadErr:       errors.New("settings unavailable"),
 	}
 
+	discoveryService := &fakeDiscoveryService{}
+	routingService := &fakeRoutingService{}
+
+	manager := New()
+	manager.Set(
+		discoveryService,
+		routingService,
+	)
+
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
-		New(),
+		manager,
 	)
 
 	err := task.Refresh(context.Background())
@@ -201,6 +210,18 @@ func TestRefreshTaskReturnsLoadError(t *testing.T) {
 		t.Fatalf(
 			"Refresh() error = %q, want runtime settings context",
 			err,
+		)
+	}
+
+	if manager.Discovery() != discoveryService {
+		t.Fatal(
+			"failed refresh replaced the existing discovery service",
+		)
+	}
+
+	if manager.Routing() != routingService {
+		t.Fatal(
+			"failed refresh replaced the existing routing service",
 		)
 	}
 }
