@@ -2,6 +2,7 @@ package infrared
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -149,6 +150,111 @@ func TestReloadingControllerSkipsReloadWhenConfigurationsUnchanged(
 	if reloader.calls != 0 {
 		t.Fatalf(
 			"Reload() calls = %d, want 0",
+			reloader.calls,
+		)
+	}
+}
+
+func TestReloadingControllerRetriesPendingReload(t *testing.T) {
+	reloadErr := errors.New("reload failed")
+
+	baseController := &reloadingTestController{
+		changed: true,
+	}
+	reloader := &reloadingTestReloader{
+		controller: baseController,
+		err:        reloadErr,
+	}
+
+	controller, err := NewReloadingController(
+		baseController,
+		reloader,
+	)
+	if err != nil {
+		t.Fatalf("NewReloadingController() error = %v", err)
+	}
+
+	err = controller.Reconcile(context.Background(), nil)
+	if !errors.Is(err, reloadErr) {
+		t.Fatalf(
+			"first Reconcile() error = %v, want error %v",
+			err,
+			reloadErr,
+		)
+	}
+
+	baseController.changed = false
+	reloader.err = nil
+
+	err = controller.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("second Reconcile() error = %v", err)
+	}
+
+	if baseController.calls != 2 {
+		t.Fatalf(
+			"base ReconcileChanges() calls = %d, want 2",
+			baseController.calls,
+		)
+	}
+
+	if reloader.calls != 2 {
+		t.Fatalf(
+			"Reload() calls = %d, want 2",
+			reloader.calls,
+		)
+	}
+}
+
+func TestReloadingControllerRetriesReloadAfterCancellation(
+	t *testing.T,
+) {
+	baseController := &reloadingTestController{
+		changed: true,
+	}
+	reloader := &reloadingTestReloader{
+		controller: baseController,
+	}
+
+	controller, err := NewReloadingController(
+		baseController,
+		reloader,
+	)
+	if err != nil {
+		t.Fatalf("NewReloadingController() error = %v", err)
+	}
+
+	cancelledContext, cancel := context.WithCancel(
+		context.Background(),
+	)
+	cancel()
+
+	err = controller.Reconcile(cancelledContext, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf(
+			"first Reconcile() error = %v, want error %v",
+			err,
+			context.Canceled,
+		)
+	}
+
+	if reloader.calls != 0 {
+		t.Fatalf(
+			"Reload() calls after cancellation = %d, want 0",
+			reloader.calls,
+		)
+	}
+
+	baseController.changed = false
+
+	err = controller.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("second Reconcile() error = %v", err)
+	}
+
+	if reloader.calls != 1 {
+		t.Fatalf(
+			"Reload() calls after retry = %d, want 1",
 			reloader.calls,
 		)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/zurco34/pelican-mc-router/internal/router"
 )
@@ -29,8 +30,10 @@ type Reloader interface {
 }
 
 type ReloadingController struct {
-	controller ChangeAwareRouteController
-	reloader   Reloader
+	mu            sync.Mutex
+	controller    ChangeAwareRouteController
+	reloader      Reloader
+	reloadPending bool
 }
 
 func NewReloadingController(
@@ -55,6 +58,9 @@ func (c *ReloadingController) Reconcile(
 	ctx context.Context,
 	routes []router.Route,
 ) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	changed, err := c.controller.ReconcileChanges(ctx, routes)
 	if err != nil {
 		return fmt.Errorf(
@@ -63,7 +69,11 @@ func (c *ReloadingController) Reconcile(
 		)
 	}
 
-	if !changed {
+	if changed {
+		c.reloadPending = true
+	}
+
+	if !c.reloadPending {
 		return nil
 	}
 
@@ -80,6 +90,8 @@ func (c *ReloadingController) Reconcile(
 			err,
 		)
 	}
+
+	c.reloadPending = false
 
 	return nil
 }
