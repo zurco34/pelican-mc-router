@@ -62,8 +62,29 @@ func Run() error {
 		)
 	}
 
-	routeSynchronizer, err := router.NewSynchronizer(
+	infraredReloader, err := infrared.NewMarkerReloader(
+		cfg.Infrared.ReloadMarkerPath,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"create Infrared marker reloader: %w",
+			err,
+		)
+	}
+
+	reloadingInfraredController, err := infrared.NewReloadingController(
 		infraredController,
+		infraredReloader,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"create reloading Infrared controller: %w",
+			err,
+		)
+	}
+
+	routeSynchronizer, err := router.NewSynchronizer(
+		reloadingInfraredController,
 	)
 	if err != nil {
 		return fmt.Errorf(
