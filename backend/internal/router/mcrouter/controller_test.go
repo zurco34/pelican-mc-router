@@ -14,6 +14,8 @@ type fakeRouteClient struct {
 	listErr     error
 	createCalls int
 	createErr   error
+	deleteCalls int
+	deleteErr   error
 	routes      map[string]string
 	created     map[string]string
 	deleted     []string
@@ -61,6 +63,12 @@ func (c *fakeRouteClient) DeleteRoute(
 	_ context.Context,
 	hostname string,
 ) error {
+	c.deleteCalls++
+
+	if c.deleteErr != nil {
+		return c.deleteErr
+	}
+
 	c.deleted = append(c.deleted, hostname)
 
 	return nil
@@ -835,6 +843,90 @@ func TestControllerReconcilePropagatesCreateRouteErrorBeforeDeletingStaleRoutes(
 		t.Fatalf(
 			"CreateRoute() calls = %d, want 1",
 			client.createCalls,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
+
+func TestControllerReconcilePropagatesDeleteRouteError(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	const (
+		desiredHostname = "survival.mc.example.com"
+		staleHostname   = "stale.mc.example.com"
+		backend         = "10.0.0.25:25565"
+	)
+
+	deleteErr := errors.New("delete route failed")
+
+	client := &fakeRouteClient{
+		deleteErr: deleteErr,
+		routes: map[string]string{
+			desiredHostname: backend,
+			staleHostname:   "10.0.0.24:25565",
+		},
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: desiredHostname,
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf(
+			"Reconcile() error = %v, want wrapped %v",
+			err,
+			deleteErr,
+		)
+	}
+
+	if client.listCalls != 1 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 1",
+			client.listCalls,
+		)
+	}
+
+	if client.createCalls != 0 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 0",
+			client.createCalls,
+		)
+	}
+
+	if client.deleteCalls != 1 {
+		t.Fatalf(
+			"DeleteRoute() calls = %d, want 1",
+			client.deleteCalls,
 		)
 	}
 
