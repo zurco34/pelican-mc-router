@@ -33,3 +33,63 @@ router:
 
 mcrouter:
   api_url: "http://mc-router:8080"
+```
+
+### Infrared
+
+Infrared remains available as an optional backend. Pelican MC Router writes
+managed proxy configuration files and updates a reload marker after changes.
+
+```yaml
+router:
+  backend: "infrared"
+  domain: "mc.example.com"
+
+infrared:
+  proxies_path: "/etc/infrared/proxies"
+  reload_marker_path: "/etc/infrared/control/infrared.reload"
+```
+
+## Routing flow
+
+```text
+Minecraft client
+        |
+        v
+Selected routing backend
+  |-- mc-router
+  `-- Infrared
+        |
+        v
+Pelican-managed Minecraft server
+```
+
+For example, a Pelican server named `Techopolis` can be exposed as:
+
+```text
+techopolis.mc.example.com
+```
+
+## Architecture
+
+```text
+Pelican API
+    |
+    v
+Route discovery
+    |
+    v
+Generic route synchronizer
+    |
+    v
+Selected backend adapter
+  |-- mc-router HTTP API
+  `-- Infrared configuration files
+```
+
+Only one routing backend is active for a deployment.
+
+## Project status
+
+Under active development. Configuration formats and deployment behavior may
+change before the first stable release.
