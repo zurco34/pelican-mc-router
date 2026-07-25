@@ -95,8 +95,45 @@ The production-oriented Docker Compose stack includes Pelican MC Router,
 mc-router, private control-plane networking, persistent SQLite storage, and
 least-privilege container settings.
 
-See [Docker Compose deployment](docs/DEPLOYMENT.md) for installation,
-initial setup, networking, security, and upgrade instructions.
+Versioned multi-platform container images are published to:
+
+```text
+ghcr.io/zurco34/pelican-mc-router
+```
+
+For the `v0.1.0` release, create the environment file and start the pinned
+production images:
+
+```bash
+cp .env.example .env
+
+docker compose pull
+docker compose up --detach --no-build
+```
+
+Podman Compose is also supported:
+
+```bash
+cp .env.example .env
+
+podman-compose pull
+podman-compose up --detach
+```
+
+Building from source remains available for development:
+
+```bash
+PELICAN_MC_ROUTER_IMAGE=pelican-mc-router:local \
+  docker compose up --detach --build
+```
+
+See [Docker Compose deployment](docs/DEPLOYMENT.md) for initial setup,
+networking, security, source builds, and upgrade instructions.
+
+## Releases
+
+See the [changelog](CHANGELOG.md) for release contents, known limitations, and
+security-related deployment details.
 
 ## Project status
 
