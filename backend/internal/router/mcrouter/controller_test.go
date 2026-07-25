@@ -15,6 +15,7 @@ type fakeRouteClient struct {
 	createCalls int
 	createErr   error
 	createOrder []string
+	afterCreate func()
 	deleteCalls int
 	deleteErr   error
 	routes      map[string]string
@@ -57,6 +58,10 @@ func (c *fakeRouteClient) CreateRoute(
 	}
 
 	c.created[hostname] = backend
+
+	if c.afterCreate != nil {
+		c.afterCreate()
+	}
 
 	return nil
 }
@@ -1233,6 +1238,106 @@ func TestControllerReconcileMakesNoChangesWhenRoutesMatch(
 		t.Fatalf(
 			"created routes = %#v, want none",
 			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
+
+func TestControllerReconcileStopsAfterContextCancellationDuringCreation(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := &fakeRouteClient{
+		routes: map[string]string{
+			"stale.mc.example.com": "10.0.0.24:25564",
+		},
+		afterCreate: cancel,
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		ctx,
+		[]router.Route{
+			{
+				ServerID: "server-beta",
+				Hostname: "beta.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.26",
+					Port: 25566,
+				},
+			},
+			{
+				ServerID: "server-alpha",
+				Hostname: "alpha.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf(
+			"Reconcile() error = %v, want wrapped %v",
+			err,
+			context.Canceled,
+		)
+	}
+
+	if client.listCalls != 1 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 1",
+			client.listCalls,
+		)
+	}
+
+	if client.createCalls != 1 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 1",
+			client.createCalls,
+		)
+	}
+
+	expectedOrder := []string{
+		"alpha.mc.example.com",
+	}
+
+	if len(client.createOrder) != len(expectedOrder) ||
+		client.createOrder[0] != expectedOrder[0] {
+		t.Fatalf(
+			"CreateRoute() order = %#v, want %#v",
+			client.createOrder,
+			expectedOrder,
+		)
+	}
+
+	if got := client.created["alpha.mc.example.com"]; got != "10.0.0.25:25565" {
+		t.Fatalf(
+			"created route backend = %q, want %q",
+			got,
+			"10.0.0.25:25565",
+		)
+	}
+
+	if client.deleteCalls != 0 {
+		t.Fatalf(
+			"DeleteRoute() calls = %d, want 0",
+			client.deleteCalls,
 		)
 	}
 
