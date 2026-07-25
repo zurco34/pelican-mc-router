@@ -94,6 +94,9 @@ router:
   backend: "infrared"
   domain: "mc.example.com"
 
+mcrouter:
+  api_url: "http://mc-router:8080"
+
 infrared:
   proxies_path: "/tmp/infrared/proxies"
   reload_marker_path: "/tmp/infrared/control/infrared.reload"
@@ -164,6 +167,14 @@ database:
 			"Router.Domain = %q, want %q",
 			cfg.Router.Domain,
 			"mc.example.com",
+		)
+	}
+
+	if cfg.MCRouter.APIURL != "http://mc-router:8080" {
+		t.Errorf(
+			"MCRouter.APIURL = %q, want %q",
+			cfg.MCRouter.APIURL,
+			"http://mc-router:8080",
 		)
 	}
 
