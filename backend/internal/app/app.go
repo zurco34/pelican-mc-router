@@ -70,6 +70,7 @@ func Run() error {
 	refresher := runtime.NewRefreshTask(
 		settingsStore,
 		cfg.Pelican.Timeout,
+		cfg.Discovery.WildcardBackendHost,
 		runtimeManager,
 		routeSynchronizer,
 	)

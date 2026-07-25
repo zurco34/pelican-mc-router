@@ -3,6 +3,8 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"net/netip"
+	"strings"
 
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
@@ -17,14 +19,31 @@ type PelicanClient interface {
 	) ([]pelican.AllocationResource, error)
 }
 
-type Service struct {
-	client PelicanClient
+type Option func(*Service)
+
+func WithWildcardBackendHost(host string) Option {
+	return func(service *Service) {
+		service.wildcardBackendHost = strings.TrimSpace(host)
+	}
 }
 
-func New(client PelicanClient) *Service {
-	return &Service{
+type Service struct {
+	client              PelicanClient
+	wildcardBackendHost string
+}
+
+func New(client PelicanClient, options ...Option) *Service {
+	service := &Service{
 		client: client,
 	}
+
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+
+	return service
 }
 
 func (s *Service) Discover(
@@ -95,12 +114,53 @@ func (s *Service) Discover(
 			)
 		}
 
+		backendHost, err := s.resolveBackendHost(allocation.IP)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"resolve backend host for server %q: %w",
+				server.Attributes.Name,
+				err,
+			)
+		}
+
 		minecraftServer := mapMinecraftServer(server)
-		minecraftServer.BackendIP = allocation.IP
+		minecraftServer.BackendIP = backendHost
 		minecraftServer.BackendPort = allocation.Port
 
 		discovered = append(discovered, minecraftServer)
 	}
 
 	return discovered, nil
+}
+
+func (s *Service) resolveBackendHost(
+	allocationIP string,
+) (string, error) {
+	host := strings.TrimSpace(allocationIP)
+	if host == "" {
+		return "", fmt.Errorf("allocation IP is empty")
+	}
+
+	address, err := netip.ParseAddr(host)
+	if err != nil || !address.IsUnspecified() {
+		return host, nil
+	}
+
+	fallback := strings.TrimSpace(s.wildcardBackendHost)
+	if fallback == "" {
+		return "", fmt.Errorf(
+			"allocation IP %q is unspecified and no wildcard backend host is configured",
+			host,
+		)
+	}
+
+	fallbackAddress, err := netip.ParseAddr(fallback)
+	if err == nil && fallbackAddress.IsUnspecified() {
+		return "", fmt.Errorf(
+			"configured wildcard backend host %q is also unspecified",
+			fallback,
+		)
+	}
+
+	return fallback, nil
 }

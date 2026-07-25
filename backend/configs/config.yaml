@@ -12,6 +12,7 @@ pelican:
 
 discovery:
   interval: 30s
+  wildcard_backend_host: ""
 
 router:
   backend: "mc-router"

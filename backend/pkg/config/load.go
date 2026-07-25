@@ -54,6 +54,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("pelican.timeout", 15*time.Second)
 
 	v.SetDefault("discovery.interval", 30*time.Second)
+	v.SetDefault("discovery.wildcard_backend_host", "")
 
 	v.SetDefault("router.backend", "mc-router")
 

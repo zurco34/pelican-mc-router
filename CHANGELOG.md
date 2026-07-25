@@ -5,6 +5,26 @@ All notable changes to Pelican MC Router are documented in this file.
 The project follows Semantic Versioning. Until version `1.0.0`, configuration,
 API behavior, and deployment details may change between minor releases.
 
+## 0.1.1
+
+Patch release fixing Pelican wildcard allocation routing.
+
+### Fixed
+
+- Resolve Pelican allocation addresses `0.0.0.0` and `::` through the
+  configurable `discovery.wildcard_backend_host` before route generation.
+- Return a clear discovery error when a wildcard allocation has no configured
+  fallback instead of programming an invalid routing destination.
+- Preserve routable allocation IP addresses unchanged.
+
+### Added
+
+- Add the
+  `PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST` environment variable and
+  matching YAML configuration.
+- Document how to choose a Pelican node address or Docker bridge gateway that
+  is reachable from the routing backend.
+
 ## 0.1.0
 
 First public development release.

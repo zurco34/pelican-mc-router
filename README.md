@@ -70,6 +70,22 @@ For example, a Pelican server named `Techopolis` can be exposed as:
 techopolis.mc.example.com
 ```
 
+## Wildcard Pelican allocations
+
+Pelican nodes may publish allocations with `0.0.0.0` or `::`. These values are
+listener bind addresses and cannot be used as remote routing destinations.
+
+Configure a reachable fallback destination when a node uses wildcard
+allocations:
+
+```dotenv
+PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
+```
+
+The correct address depends on the deployment network and must be reachable
+from the routing backend. Routable allocation IPs returned by Pelican continue
+to be used unchanged.
+
 ## Architecture
 
 ```text
@@ -101,7 +117,7 @@ Versioned multi-platform container images are published to:
 ghcr.io/zurco34/pelican-mc-router
 ```
 
-For the `v0.1.0` release, create the environment file and start the pinned
+For the `v0.1.1` release, create the environment file and start the pinned
 production images:
 
 ```bash

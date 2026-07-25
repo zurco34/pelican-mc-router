@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
@@ -254,5 +255,141 @@ func TestServiceDiscoverSkipsServerWithUnknownEgg(t *testing.T) {
 
 	if len(got) != 0 {
 		t.Errorf("Discover() returned %d servers, want 0", len(got))
+	}
+}
+
+func TestServiceDiscoverResolvesUnspecifiedAllocationIP(t *testing.T) {
+	tests := []struct {
+		name         string
+		allocationIP string
+	}{
+		{
+			name:         "IPv4 wildcard",
+			allocationIP: "0.0.0.0",
+		},
+		{
+			name:         "IPv6 wildcard",
+			allocationIP: "::",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := wildcardAllocationClient(test.allocationIP)
+
+			service := New(
+				client,
+				WithWildcardBackendHost("172.50.0.1"),
+			)
+
+			got, err := service.Discover(context.Background())
+			if err != nil {
+				t.Fatalf("Discover() error = %v", err)
+			}
+
+			if len(got) != 1 {
+				t.Fatalf(
+					"Discover() returned %d servers, want 1",
+					len(got),
+				)
+			}
+
+			if got[0].BackendIP != "172.50.0.1" {
+				t.Errorf(
+					"BackendIP = %q, want %q",
+					got[0].BackendIP,
+					"172.50.0.1",
+				)
+			}
+		})
+	}
+}
+
+func TestServiceDiscoverRejectsUnspecifiedAllocationWithoutFallback(
+	t *testing.T,
+) {
+	client := wildcardAllocationClient("0.0.0.0")
+	service := New(client)
+
+	_, err := service.Discover(context.Background())
+	if err == nil {
+		t.Fatal("Discover() error = nil, want an error")
+	}
+
+	if !strings.Contains(
+		err.Error(),
+		"no wildcard backend host is configured",
+	) {
+		t.Fatalf(
+			"Discover() error = %q, want missing fallback context",
+			err,
+		)
+	}
+}
+
+func TestServiceDiscoverKeepsRoutableAllocationIP(t *testing.T) {
+	client := wildcardAllocationClient("192.168.1.10")
+
+	service := New(
+		client,
+		WithWildcardBackendHost("172.50.0.1"),
+	)
+
+	got, err := service.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf(
+			"Discover() returned %d servers, want 1",
+			len(got),
+		)
+	}
+
+	if got[0].BackendIP != "192.168.1.10" {
+		t.Errorf(
+			"BackendIP = %q, want %q",
+			got[0].BackendIP,
+			"192.168.1.10",
+		)
+	}
+}
+
+func wildcardAllocationClient(
+	allocationIP string,
+) *fakePelicanClient {
+	return &fakePelicanClient{
+		servers: []pelican.ServerResource{
+			{
+				Attributes: pelican.ServerAttributes{
+					ID:         1,
+					Name:       "Vanilla",
+					Egg:        1,
+					Node:       1,
+					Allocation: 100,
+				},
+			},
+		},
+		eggs: []pelican.EggResource{
+			{
+				Attributes: pelican.EggAttributes{
+					ID:   1,
+					Tags: []string{"minecraft"},
+				},
+			},
+		},
+		allocations: map[int][]pelican.AllocationResource{
+			1: {
+				{
+					Attributes: pelican.AllocationAttributes{
+						ID:       100,
+						IP:       allocationIP,
+						Port:     25566,
+						Assigned: true,
+					},
+				},
+			},
+		},
 	}
 }
