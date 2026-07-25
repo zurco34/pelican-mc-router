@@ -2,6 +2,7 @@ package mcrouter
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/zurco34/pelican-mc-router/internal/router"
@@ -205,6 +206,67 @@ func TestControllerReconcileDeletesStaleRoute(t *testing.T) {
 			"deleted route = %q, want %q",
 			client.deleted[0],
 			staleHostname,
+		)
+	}
+}
+
+func TestControllerReconcileRejectsDuplicateHostnameBeforeMutations(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	const hostname = "survival.mc.example.com"
+
+	client := &fakeRouteClient{
+		routes: make(map[string]string),
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: hostname,
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+			{
+				ServerID: "server-456",
+				Hostname: hostname,
+				Backend: router.Backend{
+					Host: "10.0.0.26",
+					Port: 25566,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, ErrDuplicateHostname) {
+		t.Fatalf(
+			"Reconcile() error = %v, want %v",
+			err,
+			ErrDuplicateHostname,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
 		)
 	}
 }

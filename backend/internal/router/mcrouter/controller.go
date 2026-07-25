@@ -12,8 +12,13 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/router"
 )
 
-var ErrRouteClientRequired = errors.New(
-	"mcrouter: route client is required",
+var (
+	ErrRouteClientRequired = errors.New(
+		"mcrouter: route client is required",
+	)
+	ErrDuplicateHostname = errors.New(
+		"mcrouter: duplicate route hostname",
+	)
 )
 
 type routeClient interface {
@@ -53,19 +58,18 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	currentRoutes, err := c.client.ListRoutes(ctx)
-	if err != nil {
-		return fmt.Errorf(
-			"mcrouter: list current routes: %w",
-			err,
-		)
-	}
-
+	desiredBackends := make(
+		map[string]string,
+		len(routes),
+	)
 	desiredHostnames := make(
-		map[string]struct{},
+		[]string,
+		0,
 		len(routes),
 	)
 
+	// Validate and prepare the complete desired state before making
+	// any calls that could mutate mc-router.
 	for _, route := range routes {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf(
@@ -74,25 +78,59 @@ func (c *Controller) Reconcile(
 			)
 		}
 
-		desiredHostnames[route.Hostname] = struct{}{}
+		hostname := route.Hostname
 
-		backend := net.JoinHostPort(
+		if _, exists := desiredBackends[hostname]; exists {
+			return fmt.Errorf(
+				"mcrouter: duplicate route hostname %q: %w",
+				hostname,
+				ErrDuplicateHostname,
+			)
+		}
+
+		desiredBackends[hostname] = net.JoinHostPort(
 			route.Backend.Host,
 			strconv.Itoa(route.Backend.Port),
 		)
 
-		if currentRoutes[route.Hostname] == backend {
+		desiredHostnames = append(
+			desiredHostnames,
+			hostname,
+		)
+	}
+
+	sort.Strings(desiredHostnames)
+
+	currentRoutes, err := c.client.ListRoutes(ctx)
+	if err != nil {
+		return fmt.Errorf(
+			"mcrouter: list current routes: %w",
+			err,
+		)
+	}
+
+	for _, hostname := range desiredHostnames {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf(
+				"mcrouter: reconcile routes: %w",
+				err,
+			)
+		}
+
+		backend := desiredBackends[hostname]
+
+		if currentRoutes[hostname] == backend {
 			continue
 		}
 
 		if err := c.client.CreateRoute(
 			ctx,
-			route.Hostname,
+			hostname,
 			backend,
 		); err != nil {
 			return fmt.Errorf(
 				"mcrouter: create route %q: %w",
-				route.Hostname,
+				hostname,
 				err,
 			)
 		}
@@ -101,7 +139,7 @@ func (c *Controller) Reconcile(
 	staleHostnames := make([]string, 0)
 
 	for hostname := range currentRoutes {
-		if _, desired := desiredHostnames[hostname]; desired {
+		if _, desired := desiredBackends[hostname]; desired {
 			continue
 		}
 
