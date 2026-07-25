@@ -57,7 +57,10 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("router.backend", "infrared")
 
+	v.SetDefault("mcrouter.api_url", "http://mc-router:8080")
+
 	v.SetDefault("infrared.proxies_path", "/etc/infrared/proxies")
+
 	v.SetDefault(
 		"infrared.reload_marker_path",
 		"/etc/infrared/control/infrared.reload",

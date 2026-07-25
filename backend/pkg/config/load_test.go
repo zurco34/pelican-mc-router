@@ -47,6 +47,7 @@ func TestLoadDefaults(t *testing.T) {
 			30*time.Second,
 		)
 	}
+
 	if cfg.Database.Path != "./data/pelican-mc-router.db" {
 		t.Errorf(
 			"Database.Path = %q, want %q",
@@ -54,6 +55,23 @@ func TestLoadDefaults(t *testing.T) {
 			"./data/pelican-mc-router.db",
 		)
 	}
+
+	if cfg.Router.Backend != "infrared" {
+		t.Errorf(
+			"Router.Backend = %q, want %q",
+			cfg.Router.Backend,
+			"infrared",
+		)
+	}
+
+	if cfg.MCRouter.APIURL != "http://mc-router:8080" {
+		t.Errorf(
+			"MCRouter.APIURL = %q, want %q",
+			cfg.MCRouter.APIURL,
+			"http://mc-router:8080",
+		)
+	}
+
 	if cfg.Infrared.ProxiesPath != "/etc/infrared/proxies" {
 		t.Errorf(
 			"Infrared.ProxiesPath = %q, want %q",
@@ -61,6 +79,7 @@ func TestLoadDefaults(t *testing.T) {
 			"/etc/infrared/proxies",
 		)
 	}
+
 	if cfg.Infrared.ReloadMarkerPath != "/etc/infrared/control/infrared.reload" {
 		t.Errorf(
 			"Infrared.ReloadMarkerPath = %q, want %q",
