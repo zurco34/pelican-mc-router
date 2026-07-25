@@ -159,3 +159,47 @@ func TestClientCreateRoute(t *testing.T) {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 }
+
+func TestClientDeleteRoute(t *testing.T) {
+	const hostname = "survival.mc.example.com"
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			if request.Method != http.MethodDelete {
+				t.Errorf(
+					"request method = %q, want %q",
+					request.Method,
+					http.MethodDelete,
+				)
+			}
+
+			expectedPath := "/routes/" + hostname
+			if request.URL.Path != expectedPath {
+				t.Errorf(
+					"request path = %q, want %q",
+					request.URL.Path,
+					expectedPath,
+				)
+			}
+
+			writer.WriteHeader(http.StatusOK)
+		},
+	))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	err = client.DeleteRoute(
+		context.Background(),
+		hostname,
+	)
+	if err != nil {
+		t.Fatalf("DeleteRoute() error = %v", err)
+	}
+}

@@ -209,3 +209,52 @@ func (c *Client) CreateRoute(
 
 	return nil
 }
+
+func (c *Client) DeleteRoute(
+	ctx context.Context,
+	hostname string,
+) error {
+	requestURL := *c.baseURL
+	requestURL.Path = path.Join(
+		requestURL.Path,
+		"routes",
+		hostname,
+	)
+
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodDelete,
+		requestURL.String(),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"mcrouter: create delete route request: %w",
+			err,
+		)
+	}
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf(
+			"mcrouter: delete route request: %w",
+			err,
+		)
+	}
+	defer response.Body.Close()
+
+	_, _ = io.Copy(
+		io.Discard,
+		io.LimitReader(response.Body, maxResponseSize),
+	)
+
+	if response.StatusCode < http.StatusOK ||
+		response.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf(
+			"mcrouter: delete route returned status %s",
+			response.Status,
+		)
+	}
+
+	return nil
+}
