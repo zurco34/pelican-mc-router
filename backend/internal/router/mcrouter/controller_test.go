@@ -100,6 +100,58 @@ func TestControllerReconcileCreatesMissingRoute(t *testing.T) {
 	}
 }
 
+func TestControllerReconcileNormalizesCreatedHostname(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	client := &fakeRouteClient{
+		routes: make(map[string]string),
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: " Survival.MC.Example.COM ",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	const (
+		normalizedHostname = "survival.mc.example.com"
+		backend            = "10.0.0.25:25565"
+	)
+
+	if len(client.created) != 1 {
+		t.Fatalf(
+			"created routes = %#v, want one route",
+			client.created,
+		)
+	}
+
+	if got := client.created[normalizedHostname]; got != backend {
+		t.Fatalf(
+			"created route backend = %q, want %q",
+			got,
+			backend,
+		)
+	}
+}
+
 func TestControllerReconcileUpdatesChangedRoute(t *testing.T) {
 	t.Parallel()
 
