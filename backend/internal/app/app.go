@@ -11,7 +11,6 @@ import (
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
 	"github.com/zurco34/pelican-mc-router/internal/router"
-	"github.com/zurco34/pelican-mc-router/internal/router/infrared"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/scheduler"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -50,41 +49,16 @@ func Run() error {
 
 	runtimeManager := runtime.New()
 
-	infraredController, err := infrared.NewController(
-		infrared.Config{
-			Directory: cfg.Infrared.ProxiesPath,
-		},
-	)
+	routeController, err := newRouteController(*cfg)
 	if err != nil {
 		return fmt.Errorf(
-			"create Infrared controller: %w",
-			err,
-		)
-	}
-
-	infraredReloader, err := infrared.NewMarkerReloader(
-		cfg.Infrared.ReloadMarkerPath,
-	)
-	if err != nil {
-		return fmt.Errorf(
-			"create Infrared marker reloader: %w",
-			err,
-		)
-	}
-
-	reloadingInfraredController, err := infrared.NewReloadingController(
-		infraredController,
-		infraredReloader,
-	)
-	if err != nil {
-		return fmt.Errorf(
-			"create reloading Infrared controller: %w",
+			"create route controller: %w",
 			err,
 		)
 	}
 
 	routeSynchronizer, err := router.NewSynchronizer(
-		reloadingInfraredController,
+		routeController,
 	)
 	if err != nil {
 		return fmt.Errorf(
