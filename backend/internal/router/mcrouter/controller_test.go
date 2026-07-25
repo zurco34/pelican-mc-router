@@ -274,6 +274,74 @@ func TestControllerReconcileRejectsDuplicateHostnameBeforeMutations(
 	}
 }
 
+func TestControllerReconcileRejectsDuplicateNormalizedHostnameBeforeAPICalls(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	client := &fakeRouteClient{
+		routes: map[string]string{
+			"existing.mc.example.com": "10.0.0.24:25565",
+		},
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: " Survival.MC.Example.COM ",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+			{
+				ServerID: "server-456",
+				Hostname: "survival.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.26",
+					Port: 25566,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, ErrDuplicateHostname) {
+		t.Fatalf(
+			"Reconcile() error = %v, want %v",
+			err,
+			ErrDuplicateHostname,
+		)
+	}
+
+	if client.listCalls != 0 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 0",
+			client.listCalls,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
+
 func TestControllerReconcileRejectsEmptyHostnameBeforeAPICalls(
 	t *testing.T,
 ) {
