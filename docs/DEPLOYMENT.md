@@ -76,22 +76,34 @@ MINECRAFT_PORT=25565
 
 PELICAN_MC_ROUTER_BIND_ADDRESS=127.0.0.1
 PELICAN_MC_ROUTER_HTTP_PORT=8080
+
+MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.0
 ```
 
 The `.env` file is ignored by Git and must not be committed.
 
+Keep `PELICAN_MC_ROUTER_IMAGE` pinned to an exact release version in production.
+This makes upgrades explicit and prevents an unrelated moving tag from changing
+the deployed application unexpectedly.
+
 ## Start the stack
+
+The recommended production deployment uses the versioned images configured in
+`.env`.
 
 Using Docker Compose:
 
 ```bash
-docker compose up --detach --build
+docker compose pull
+docker compose up --detach --no-build
 ```
 
 Using Podman Compose:
 
 ```bash
-podman-compose up --detach --build
+podman-compose pull
+podman-compose up --detach
 ```
 
 Check the containers with Docker:
@@ -117,6 +129,27 @@ Expected response:
 ```text
 OK
 ```
+
+## Build from source
+
+Building Pelican MC Router locally remains available for development and for
+testing unreleased changes.
+
+Using Docker Compose:
+
+```bash
+PELICAN_MC_ROUTER_IMAGE=pelican-mc-router:local \
+  docker compose up --detach --build
+```
+
+Using Podman Compose:
+
+```bash
+PELICAN_MC_ROUTER_IMAGE=pelican-mc-router:local \
+  podman-compose up --detach --build
+```
+
+The versioned GHCR image remains the recommended production deployment method.
 
 ## Initial application setup
 
@@ -306,25 +339,37 @@ Do not use `--volumes` during routine restarts or upgrades.
 
 ## Upgrade
 
-Pull the latest repository changes:
+Pull the latest deployment files:
 
 ```bash
 git pull --ff-only
 ```
 
-Pull the configured mc-router image and rebuild Pelican MC Router:
+Update the pinned Pelican MC Router image in `.env` to the desired release. For
+example:
+
+```dotenv
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
+```
+
+Replace `0.2.0` with the release being installed.
+
+Pull the configured images and recreate the containers:
 
 ```bash
-docker compose pull mc-router
-docker compose up --detach --build
+docker compose pull
+docker compose up --detach --no-build
 ```
 
 For Podman:
 
 ```bash
-podman-compose pull mc-router
-podman-compose up --detach --build
+podman-compose pull
+podman-compose up --detach
 ```
+
+Do not use `--volumes` during an upgrade. The named volume contains the SQLite
+database and application configuration.
 
 Verify health after the upgrade:
 
