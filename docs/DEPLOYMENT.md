@@ -77,8 +77,11 @@ MINECRAFT_PORT=25565
 PELICAN_MC_ROUTER_BIND_ADDRESS=127.0.0.1
 PELICAN_MC_ROUTER_HTTP_PORT=8080
 
+# Required when Pelican allocations use 0.0.0.0 or ::.
+PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
+
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.0
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.1
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -232,11 +235,23 @@ mc-router backend address.
 The allocation IP and port must therefore be reachable from inside the
 mc-router container.
 
-Do not use `127.0.0.1` as a Pelican allocation address for a server running
-outside the mc-router container. Inside a container, `127.0.0.1` refers to
-that container itself.
+Pelican may report `0.0.0.0` or `::` for an allocation. These are wildcard
+listener bind addresses, not valid remote destinations. Configure a reachable
+fallback host in `.env` when such allocations are present:
 
-Use a routable host, LAN, or container-network address instead.
+```dotenv
+PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
+```
+
+The correct value depends on the network layout. It may be the Pelican node's
+LAN address or a Docker bridge gateway shared with mc-router. The address must
+be reachable from inside the mc-router container.
+
+Pelican MC Router only applies this fallback to `0.0.0.0` and `::`. Any
+routable allocation IP returned by Pelican is preserved.
+
+Do not use `127.0.0.1` for a server running outside the mc-router container.
+Inside a container, `127.0.0.1` refers to that container itself.
 
 ## Network exposure
 

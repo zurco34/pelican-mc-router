@@ -48,6 +48,13 @@ func TestLoadDefaults(t *testing.T) {
 		)
 	}
 
+	if cfg.Discovery.WildcardBackendHost != "" {
+		t.Errorf(
+			"Discovery.WildcardBackendHost = %q, want empty string",
+			cfg.Discovery.WildcardBackendHost,
+		)
+	}
+
 	if cfg.Database.Path != "./data/pelican-mc-router.db" {
 		t.Errorf(
 			"Database.Path = %q, want %q",
@@ -108,6 +115,7 @@ pelican:
 
 discovery:
   interval: 45s
+  wildcard_backend_host: "172.50.0.1"
 
 router:
   backend: "infrared"
@@ -181,6 +189,14 @@ database:
 		)
 	}
 
+	if cfg.Discovery.WildcardBackendHost != "172.50.0.1" {
+		t.Errorf(
+			"Discovery.WildcardBackendHost = %q, want %q",
+			cfg.Discovery.WildcardBackendHost,
+			"172.50.0.1",
+		)
+	}
+
 	if cfg.Router.Domain != "mc.example.com" {
 		t.Errorf(
 			"Router.Domain = %q, want %q",
@@ -241,5 +257,28 @@ func changeWorkingDirectory(
 		if err := os.Chdir(original); err != nil {
 			t.Fatalf("restore working directory: %v", err)
 		}
+	}
+}
+
+func TestLoadWildcardBackendHostFromEnvironment(t *testing.T) {
+	workingDirectory := changeWorkingDirectory(t, t.TempDir())
+	defer workingDirectory()
+
+	t.Setenv(
+		"PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST",
+		"172.50.0.1",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Discovery.WildcardBackendHost != "172.50.0.1" {
+		t.Errorf(
+			"Discovery.WildcardBackendHost = %q, want %q",
+			cfg.Discovery.WildcardBackendHost,
+			"172.50.0.1",
+		)
 	}
 }

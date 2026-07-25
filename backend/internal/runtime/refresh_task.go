@@ -24,23 +24,26 @@ type RouteSynchronizer interface {
 type RefreshTask struct {
 	mu sync.Mutex
 
-	store        SettingsStore
-	timeout      time.Duration
-	manager      *Manager
-	synchronizer RouteSynchronizer
+	store               SettingsStore
+	timeout             time.Duration
+	wildcardBackendHost string
+	manager             *Manager
+	synchronizer        RouteSynchronizer
 }
 
 func NewRefreshTask(
 	store SettingsStore,
 	timeout time.Duration,
+	wildcardBackendHost string,
 	manager *Manager,
 	synchronizer RouteSynchronizer,
 ) *RefreshTask {
 	return &RefreshTask{
-		store:        store,
-		timeout:      timeout,
-		manager:      manager,
-		synchronizer: synchronizer,
+		store:               store,
+		timeout:             timeout,
+		wildcardBackendHost: wildcardBackendHost,
+		manager:             manager,
+		synchronizer:        synchronizer,
 	}
 }
 func (r *RefreshTask) Refresh(ctx context.Context) error {
@@ -110,7 +113,12 @@ func (r *RefreshTask) buildRuntimeServices() (
 		)
 	}
 
-	discoveryService := discovery.New(pelicanClient)
+	discoveryService := discovery.New(
+		pelicanClient,
+		discovery.WithWildcardBackendHost(
+			r.wildcardBackendHost,
+		),
+	)
 
 	routingService, err := router.New(
 		discoveryService,

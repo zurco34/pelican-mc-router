@@ -84,6 +84,7 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		manager,
 		synchronizer,
 	)
@@ -143,6 +144,7 @@ func TestRefreshTaskPreservesRuntimeWhenRouteSynchronizationFails(
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		manager,
 		synchronizer,
 	)
@@ -188,6 +190,7 @@ func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		New(),
 		nil,
 	)
@@ -271,6 +274,7 @@ func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		manager,
 		nil,
 	)
@@ -297,6 +301,7 @@ func TestRefreshTaskReturnsSetupStatusError(t *testing.T) {
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		New(),
 		nil,
 	)
@@ -332,6 +337,7 @@ func TestRefreshTaskReturnsLoadError(t *testing.T) {
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		manager,
 		nil,
 	)
@@ -379,6 +385,7 @@ func TestRefreshTaskRunDelegatesToRefresh(t *testing.T) {
 	task := NewRefreshTask(
 		store,
 		5*time.Second,
+		"",
 		manager,
 		nil,
 	)
