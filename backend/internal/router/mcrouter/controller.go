@@ -20,6 +20,9 @@ var (
 	ErrEmptyHostname = errors.New(
 		"mcrouter: route hostname must not be empty",
 	)
+	ErrEmptyBackendHost = errors.New(
+		"mcrouter: backend host must not be empty",
+	)
 	ErrDuplicateHostname = errors.New(
 		"mcrouter: duplicate route hostname",
 	)
@@ -92,6 +95,16 @@ func (c *Controller) Reconcile(
 			)
 		}
 
+		backendHost := strings.TrimSpace(route.Backend.Host)
+
+		if backendHost == "" {
+			return fmt.Errorf(
+				"mcrouter: validate route for server %q: %w",
+				route.ServerID,
+				ErrEmptyBackendHost,
+			)
+		}
+
 		if _, exists := desiredBackends[hostname]; exists {
 			return fmt.Errorf(
 				"mcrouter: duplicate route hostname %q: %w",
@@ -101,7 +114,7 @@ func (c *Controller) Reconcile(
 		}
 
 		desiredBackends[hostname] = net.JoinHostPort(
-			route.Backend.Host,
+			backendHost,
 			strconv.Itoa(route.Backend.Port),
 		)
 
