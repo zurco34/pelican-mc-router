@@ -1160,3 +1160,86 @@ func TestControllerReconcileDeletesRoutesInHostnameOrder(
 		)
 	}
 }
+
+func TestControllerReconcileMakesNoChangesWhenRoutesMatch(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	const (
+		survivalHostname = "survival.mc.example.com"
+		creativeHostname = "creative.mc.example.com"
+	)
+
+	client := &fakeRouteClient{
+		routes: map[string]string{
+			survivalHostname: "10.0.0.25:25565",
+			creativeHostname: "10.0.0.26:25566",
+		},
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-survival",
+				Hostname: survivalHostname,
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+			{
+				ServerID: "server-creative",
+				Hostname: creativeHostname,
+				Backend: router.Backend{
+					Host: "10.0.0.26",
+					Port: 25566,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if client.listCalls != 1 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 1",
+			client.listCalls,
+		)
+	}
+
+	if client.createCalls != 0 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 0",
+			client.createCalls,
+		)
+	}
+
+	if client.deleteCalls != 0 {
+		t.Fatalf(
+			"DeleteRoute() calls = %d, want 0",
+			client.deleteCalls,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
