@@ -34,6 +34,15 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
+      - name: Verify formatting
+        run: |
+          files="$(gofmt -l .)"
+          if [ -n "${files}" ]; then
+            echo "The following files are not formatted:"
+            echo "${files}"
+            exit 1
+          fi
+
       - name: Verify modules
         run: go mod verify
 
