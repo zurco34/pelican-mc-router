@@ -1,6 +1,7 @@
 package mcrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,11 @@ type Client struct {
 type routeResponse struct {
 	Backend       string `json:"backend"`
 	ScalingTarget string `json:"scalingTarget"`
+}
+
+type createRouteRequest struct {
+	ServerAddress string `json:"serverAddress"`
+	Backend       string `json:"backend"`
 }
 
 func NewClient(cfg ClientConfig) (*Client, error) {
@@ -137,4 +143,69 @@ func (c *Client) ListRoutes(
 	}
 
 	return routes, nil
+}
+
+func (c *Client) CreateRoute(
+	ctx context.Context,
+	hostname string,
+	backend string,
+) error {
+	requestBody, err := json.Marshal(createRouteRequest{
+		ServerAddress: hostname,
+		Backend:       backend,
+	})
+	if err != nil {
+		return fmt.Errorf(
+			"mcrouter: encode create route request: %w",
+			err,
+		)
+	}
+
+	requestURL := *c.baseURL
+	requestURL.Path = path.Join(
+		requestURL.Path,
+		"routes",
+	)
+
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		requestURL.String(),
+		bytes.NewReader(requestBody),
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"mcrouter: create route request: %w",
+			err,
+		)
+	}
+
+	request.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf(
+			"mcrouter: create route request: %w",
+			err,
+		)
+	}
+	defer response.Body.Close()
+
+	_, _ = io.Copy(
+		io.Discard,
+		io.LimitReader(response.Body, maxResponseSize),
+	)
+
+	if response.StatusCode < http.StatusOK ||
+		response.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf(
+			"mcrouter: create route returned status %s",
+			response.Status,
+		)
+	}
+
+	return nil
 }
