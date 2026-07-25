@@ -3,6 +3,7 @@ package mcrouter
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zurco34/pelican-mc-router/internal/router"
@@ -452,6 +453,115 @@ func TestControllerReconcileRejectsInvalidBackendPortBeforeAPICalls(
 					"Reconcile() error = %v, want %v",
 					err,
 					ErrInvalidBackendPort,
+				)
+			}
+
+			if client.listCalls != 0 {
+				t.Fatalf(
+					"ListRoutes() calls = %d, want 0",
+					client.listCalls,
+				)
+			}
+
+			if len(client.created) != 0 {
+				t.Fatalf(
+					"created routes = %#v, want none",
+					client.created,
+				)
+			}
+
+			if len(client.deleted) != 0 {
+				t.Fatalf(
+					"deleted routes = %#v, want none",
+					client.deleted,
+				)
+			}
+		})
+	}
+}
+
+func TestControllerReconcileRejectsInvalidHostnameBeforeAPICalls(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		hostname string
+	}{
+		{
+			name:     "empty label",
+			hostname: "survival..mc.example.com",
+		},
+		{
+			name:     "label starts with hyphen",
+			hostname: "-survival.mc.example.com",
+		},
+		{
+			name:     "label ends with hyphen",
+			hostname: "survival-.mc.example.com",
+		},
+		{
+			name:     "invalid character",
+			hostname: "survival_mc.example.com",
+		},
+		{
+			name:     "wildcard",
+			hostname: "*.mc.example.com",
+		},
+		{
+			name: "label exceeds 63 characters",
+			hostname: strings.Repeat("a", 64) +
+				".mc.example.com",
+		},
+		{
+			name: "hostname exceeds 253 characters",
+			hostname: strings.Repeat("a.", 126) +
+				"com",
+		},
+		{
+			name:     "trailing dot",
+			hostname: "survival.mc.example.com.",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := &fakeRouteClient{
+				routes: map[string]string{
+					"existing.mc.example.com": "10.0.0.24:25565",
+				},
+			}
+
+			controller, err := NewController(client)
+			if err != nil {
+				t.Fatalf(
+					"NewController() error = %v",
+					err,
+				)
+			}
+
+			err = controller.Reconcile(
+				context.Background(),
+				[]router.Route{
+					{
+						ServerID: "server-123",
+						Hostname: test.hostname,
+						Backend: router.Backend{
+							Host: "10.0.0.25",
+							Port: 25565,
+						},
+					},
+				},
+			)
+
+			if !errors.Is(err, ErrInvalidHostname) {
+				t.Fatalf(
+					"Reconcile() error = %v, want %v",
+					err,
+					ErrInvalidHostname,
 				)
 			}
 

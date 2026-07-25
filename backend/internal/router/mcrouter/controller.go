@@ -20,6 +20,9 @@ var (
 	ErrEmptyHostname = errors.New(
 		"mcrouter: route hostname must not be empty",
 	)
+	ErrInvalidHostname = errors.New(
+		"mcrouter: route hostname is not a valid DNS name",
+	)
 	ErrEmptyBackendHost = errors.New(
 		"mcrouter: backend host must not be empty",
 	)
@@ -52,6 +55,46 @@ func NewController(
 	return &Controller{
 		client: client,
 	}, nil
+}
+
+func isValidHostname(hostname string) bool {
+	if len(hostname) > 253 ||
+		strings.HasSuffix(hostname, ".") {
+		return false
+	}
+
+	labels := strings.Split(hostname, ".")
+
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+
+		if label[0] == '-' ||
+			label[len(label)-1] == '-' {
+			return false
+		}
+
+		for index := 0; index < len(label); index++ {
+			character := label[index]
+
+			if character >= 'a' && character <= 'z' {
+				continue
+			}
+
+			if character >= '0' && character <= '9' {
+				continue
+			}
+
+			if character == '-' {
+				continue
+			}
+
+			return false
+		}
+	}
+
+	return true
 }
 
 func (c *Controller) Reconcile(
@@ -88,13 +131,25 @@ func (c *Controller) Reconcile(
 			)
 		}
 
-		hostname := strings.TrimSpace(route.Hostname)
+		hostname := strings.ToLower(
+			strings.TrimSpace(route.Hostname),
+		)
 
 		if hostname == "" {
 			return fmt.Errorf(
 				"mcrouter: validate route for server %q: %w",
 				route.ServerID,
 				ErrEmptyHostname,
+			)
+		}
+
+		if !isValidHostname(hostname) {
+			return fmt.Errorf(
+				"mcrouter: validate route for server %q: "+
+					"hostname %q: %w",
+				route.ServerID,
+				hostname,
+				ErrInvalidHostname,
 			)
 		}
 
