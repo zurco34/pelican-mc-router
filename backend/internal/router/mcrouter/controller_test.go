@@ -392,3 +392,89 @@ func TestControllerReconcileRejectsEmptyBackendHostBeforeAPICalls(
 		)
 	}
 }
+
+func TestControllerReconcileRejectsInvalidBackendPortBeforeAPICalls(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		port int
+	}{
+		{
+			name: "zero",
+			port: 0,
+		},
+		{
+			name: "negative",
+			port: -1,
+		},
+		{
+			name: "above maximum",
+			port: 65536,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := &fakeRouteClient{
+				routes: map[string]string{
+					"existing.mc.example.com": "10.0.0.24:25565",
+				},
+			}
+
+			controller, err := NewController(client)
+			if err != nil {
+				t.Fatalf("NewController() error = %v", err)
+			}
+
+			err = controller.Reconcile(
+				context.Background(),
+				[]router.Route{
+					{
+						ServerID: "server-123",
+						Hostname: "survival.mc.example.com",
+						Backend: router.Backend{
+							Host: "10.0.0.25",
+							Port: test.port,
+						},
+					},
+				},
+			)
+
+			if !errors.Is(err, ErrInvalidBackendPort) {
+				t.Fatalf(
+					"Reconcile() error = %v, want %v",
+					err,
+					ErrInvalidBackendPort,
+				)
+			}
+
+			if client.listCalls != 0 {
+				t.Fatalf(
+					"ListRoutes() calls = %d, want 0",
+					client.listCalls,
+				)
+			}
+
+			if len(client.created) != 0 {
+				t.Fatalf(
+					"created routes = %#v, want none",
+					client.created,
+				)
+			}
+
+			if len(client.deleted) != 0 {
+				t.Fatalf(
+					"deleted routes = %#v, want none",
+					client.deleted,
+				)
+			}
+		})
+	}
+}

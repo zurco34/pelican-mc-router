@@ -23,6 +23,9 @@ var (
 	ErrEmptyBackendHost = errors.New(
 		"mcrouter: backend host must not be empty",
 	)
+	ErrInvalidBackendPort = errors.New(
+		"mcrouter: backend port must be between 1 and 65535",
+	)
 	ErrDuplicateHostname = errors.New(
 		"mcrouter: duplicate route hostname",
 	)
@@ -102,6 +105,17 @@ func (c *Controller) Reconcile(
 				"mcrouter: validate route for server %q: %w",
 				route.ServerID,
 				ErrEmptyBackendHost,
+			)
+		}
+
+		if route.Backend.Port < 1 ||
+			route.Backend.Port > 65535 {
+			return fmt.Errorf(
+				"mcrouter: validate route for server %q: "+
+					"backend port %d: %w",
+				route.ServerID,
+				route.Backend.Port,
+				ErrInvalidBackendPort,
 			)
 		}
 
