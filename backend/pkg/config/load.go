@@ -55,7 +55,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("discovery.interval", 30*time.Second)
 
-	v.SetDefault("router.backend", "infrared")
+	v.SetDefault("router.backend", "mc-router")
 
 	v.SetDefault("mcrouter.api_url", "http://mc-router:8080")
 

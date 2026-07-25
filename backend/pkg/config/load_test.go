@@ -56,11 +56,11 @@ func TestLoadDefaults(t *testing.T) {
 		)
 	}
 
-	if cfg.Router.Backend != "infrared" {
+	if cfg.Router.Backend != "mc-router" {
 		t.Errorf(
 			"Router.Backend = %q, want %q",
 			cfg.Router.Backend,
-			"infrared",
+			"mc-router",
 		)
 	}
 
