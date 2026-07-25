@@ -1,0 +1,99 @@
+name: Container CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose:
+    name: Validate Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Show Docker Compose version
+        run: docker compose version
+
+      - name: Validate Compose model
+        run: docker compose --file docker-compose.yml config >/dev/null
+
+  image:
+    name: Build production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DOCKER_BUILDKIT: "1"
+      IMAGE_TAG: pelican-mc-router:ci
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build production image
+        run: |
+          docker build \
+            --file docker/Dockerfile \
+            --tag "${IMAGE_TAG}" \
+            --build-arg VERSION=ci \
+            --build-arg REVISION="${GITHUB_SHA}" \
+            .
+
+      - name: Verify image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          user="$(
+            docker image inspect \
+              "${IMAGE_TAG}" \
+              --format '{{.Config.User}}'
+          )"
+
+          healthcheck="$(
+            docker image inspect \
+              "${IMAGE_TAG}" \
+              --format '{{json .Config.Healthcheck.Test}}'
+          )"
+
+          version="$(
+            docker image inspect \
+              "${IMAGE_TAG}" \
+              --format '{{index .Config.Labels "org.opencontainers.image.version"}}'
+          )"
+
+          revision="$(
+            docker image inspect \
+              "${IMAGE_TAG}" \
+              --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+          )"
+
+          printf 'User: %s\n' "${user}"
+          printf 'Healthcheck: %s\n' "${healthcheck}"
+          printf 'Version: %s\n' "${version}"
+          printf 'Revision: %s\n' "${revision}"
+
+          test "${user}" = "10001:10001"
+          test "${version}" = "ci"
+          test "${revision}" = "${GITHUB_SHA}"
+
+          case "${healthcheck}" in
+            *"/health"*)
+              ;;
+            *)
+              printf '%s\n' 'Expected health endpoint was not found'
+              exit 1
+              ;;
+          esac
