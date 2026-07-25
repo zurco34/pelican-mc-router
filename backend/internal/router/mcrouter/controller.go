@@ -7,6 +7,7 @@ import (
 	"net"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/zurco34/pelican-mc-router/internal/router"
@@ -15,6 +16,9 @@ import (
 var (
 	ErrRouteClientRequired = errors.New(
 		"mcrouter: route client is required",
+	)
+	ErrEmptyHostname = errors.New(
+		"mcrouter: route hostname must not be empty",
 	)
 	ErrDuplicateHostname = errors.New(
 		"mcrouter: duplicate route hostname",
@@ -69,7 +73,7 @@ func (c *Controller) Reconcile(
 	)
 
 	// Validate and prepare the complete desired state before making
-	// any calls that could mutate mc-router.
+	// any mc-router API calls.
 	for _, route := range routes {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf(
@@ -78,7 +82,15 @@ func (c *Controller) Reconcile(
 			)
 		}
 
-		hostname := route.Hostname
+		hostname := strings.TrimSpace(route.Hostname)
+
+		if hostname == "" {
+			return fmt.Errorf(
+				"mcrouter: validate route for server %q: %w",
+				route.ServerID,
+				ErrEmptyHostname,
+			)
+		}
 
 		if _, exists := desiredBackends[hostname]; exists {
 			return fmt.Errorf(
