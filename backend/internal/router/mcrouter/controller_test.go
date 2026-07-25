@@ -18,6 +18,7 @@ type fakeRouteClient struct {
 	afterCreate func()
 	deleteCalls int
 	deleteErr   error
+	afterDelete func()
 	routes      map[string]string
 	created     map[string]string
 	deleted     []string
@@ -77,6 +78,10 @@ func (c *fakeRouteClient) DeleteRoute(
 	}
 
 	c.deleted = append(c.deleted, hostname)
+
+	if c.afterDelete != nil {
+		c.afterDelete()
+	}
 
 	return nil
 }
@@ -1345,6 +1350,90 @@ func TestControllerReconcileStopsAfterContextCancellationDuringCreation(
 		t.Fatalf(
 			"deleted routes = %#v, want none",
 			client.deleted,
+		)
+	}
+}
+
+func TestControllerReconcileStopsAfterContextCancellationDuringDeletion(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		desiredHostname = "survival.mc.example.com"
+		desiredBackend  = "10.0.0.25:25565"
+	)
+
+	client := &fakeRouteClient{
+		routes: map[string]string{
+			desiredHostname:        desiredBackend,
+			"zeta.mc.example.com":  "10.0.0.27:25567",
+			"alpha.mc.example.com": "10.0.0.26:25566",
+		},
+		afterDelete: cancel,
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		ctx,
+		[]router.Route{
+			{
+				ServerID: "server-survival",
+				Hostname: desiredHostname,
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf(
+			"Reconcile() error = %v, want wrapped %v",
+			err,
+			context.Canceled,
+		)
+	}
+
+	if client.listCalls != 1 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 1",
+			client.listCalls,
+		)
+	}
+
+	if client.createCalls != 0 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 0",
+			client.createCalls,
+		)
+	}
+
+	if client.deleteCalls != 1 {
+		t.Fatalf(
+			"DeleteRoute() calls = %d, want 1",
+			client.deleteCalls,
+		)
+	}
+
+	expectedDeleted := []string{
+		"alpha.mc.example.com",
+	}
+
+	if len(client.deleted) != len(expectedDeleted) ||
+		client.deleted[0] != expectedDeleted[0] {
+		t.Fatalf(
+			"deleted routes = %#v, want %#v",
+			client.deleted,
+			expectedDeleted,
 		)
 	}
 }
