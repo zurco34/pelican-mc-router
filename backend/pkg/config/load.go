@@ -55,11 +55,16 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("discovery.interval", 30*time.Second)
 
-	v.SetDefault("router.backend", "infrared")
+	v.SetDefault("router.backend", "mc-router")
 
-	v.SetDefault("infrared.config_path", "/etc/infrared/config.json")
-	v.SetDefault("infrared.reload_signal", "SIGHUP")
+	v.SetDefault("mcrouter.api_url", "http://mc-router:8080")
 
+	v.SetDefault("infrared.proxies_path", "/etc/infrared/proxies")
+
+	v.SetDefault(
+		"infrared.reload_marker_path",
+		"/etc/infrared/control/infrared.reload",
+	)
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
 }

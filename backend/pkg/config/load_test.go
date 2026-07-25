@@ -47,11 +47,44 @@ func TestLoadDefaults(t *testing.T) {
 			30*time.Second,
 		)
 	}
+
 	if cfg.Database.Path != "./data/pelican-mc-router.db" {
 		t.Errorf(
 			"Database.Path = %q, want %q",
 			cfg.Database.Path,
 			"./data/pelican-mc-router.db",
+		)
+	}
+
+	if cfg.Router.Backend != "mc-router" {
+		t.Errorf(
+			"Router.Backend = %q, want %q",
+			cfg.Router.Backend,
+			"mc-router",
+		)
+	}
+
+	if cfg.MCRouter.APIURL != "http://mc-router:8080" {
+		t.Errorf(
+			"MCRouter.APIURL = %q, want %q",
+			cfg.MCRouter.APIURL,
+			"http://mc-router:8080",
+		)
+	}
+
+	if cfg.Infrared.ProxiesPath != "/etc/infrared/proxies" {
+		t.Errorf(
+			"Infrared.ProxiesPath = %q, want %q",
+			cfg.Infrared.ProxiesPath,
+			"/etc/infrared/proxies",
+		)
+	}
+
+	if cfg.Infrared.ReloadMarkerPath != "/etc/infrared/control/infrared.reload" {
+		t.Errorf(
+			"Infrared.ReloadMarkerPath = %q, want %q",
+			cfg.Infrared.ReloadMarkerPath,
+			"/etc/infrared/control/infrared.reload",
 		)
 	}
 }
@@ -80,9 +113,12 @@ router:
   backend: "infrared"
   domain: "mc.example.com"
 
+mcrouter:
+  api_url: "http://mc-router:8080"
+
 infrared:
-  config_path: "/tmp/infrared.json"
-  reload_signal: "SIGUSR1"
+  proxies_path: "/tmp/infrared/proxies"
+  reload_marker_path: "/tmp/infrared/control/infrared.reload"
 
 logging:
   level: "debug"
@@ -152,6 +188,31 @@ database:
 			"mc.example.com",
 		)
 	}
+
+	if cfg.MCRouter.APIURL != "http://mc-router:8080" {
+		t.Errorf(
+			"MCRouter.APIURL = %q, want %q",
+			cfg.MCRouter.APIURL,
+			"http://mc-router:8080",
+		)
+	}
+
+	if cfg.Infrared.ProxiesPath != "/tmp/infrared/proxies" {
+		t.Errorf(
+			"Infrared.ProxiesPath = %q, want %q",
+			cfg.Infrared.ProxiesPath,
+			"/tmp/infrared/proxies",
+		)
+	}
+
+	if cfg.Infrared.ReloadMarkerPath != "/tmp/infrared/control/infrared.reload" {
+		t.Errorf(
+			"Infrared.ReloadMarkerPath = %q, want %q",
+			cfg.Infrared.ReloadMarkerPath,
+			"/tmp/infrared/control/infrared.reload",
+		)
+	}
+
 	if cfg.Database.Path != "/tmp/router.db" {
 		t.Errorf(
 			"Database.Path = %q, want %q",

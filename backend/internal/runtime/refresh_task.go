@@ -17,33 +17,48 @@ type SettingsStore interface {
 	Load() (settings.Settings, error)
 }
 
+type RouteSynchronizer interface {
+	Sync(context.Context, router.RouteSource) error
+}
+
 type RefreshTask struct {
 	mu sync.Mutex
 
-	store   SettingsStore
-	timeout time.Duration
-	manager *Manager
+	store        SettingsStore
+	timeout      time.Duration
+	manager      *Manager
+	synchronizer RouteSynchronizer
 }
 
 func NewRefreshTask(
 	store SettingsStore,
 	timeout time.Duration,
 	manager *Manager,
+	synchronizer RouteSynchronizer,
 ) *RefreshTask {
 	return &RefreshTask{
-		store:   store,
-		timeout: timeout,
-		manager: manager,
+		store:        store,
+		timeout:      timeout,
+		manager:      manager,
+		synchronizer: synchronizer,
 	}
 }
-
-func (r *RefreshTask) Refresh(context.Context) error {
+func (r *RefreshTask) Refresh(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	discoveryService, routingService, err := r.buildRuntimeServices()
 	if err != nil {
 		return fmt.Errorf("build runtime services: %w", err)
+	}
+
+	if routingService != nil && r.synchronizer != nil {
+		if err := r.synchronizer.Sync(ctx, routingService); err != nil {
+			return fmt.Errorf(
+				"synchronize routes: %w",
+				err,
+			)
+		}
 	}
 
 	r.manager.Set(

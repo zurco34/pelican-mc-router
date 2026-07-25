@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 )
 
@@ -33,6 +34,25 @@ type blockingSettingsStore struct {
 	release chan struct{}
 }
 
+type recordingRouteSynchronizer struct {
+	manager          *Manager
+	source           routing.RouteSource
+	calls            int
+	runtimePublished bool
+	err              error
+}
+
+func (f *recordingRouteSynchronizer) Sync(
+	_ context.Context,
+	source routing.RouteSource,
+) error {
+	f.calls++
+	f.source = source
+	f.runtimePublished = f.manager.Routing() != nil
+
+	return f.err
+}
+
 func (f *blockingSettingsStore) IsSetupComplete() (bool, error) {
 	f.entered <- struct{}{}
 	<-f.release
@@ -42,6 +62,121 @@ func (f *blockingSettingsStore) IsSetupComplete() (bool, error) {
 
 func (*blockingSettingsStore) Load() (settings.Settings, error) {
 	return settings.Settings{}, nil
+}
+
+func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
+	t *testing.T,
+) {
+	store := &fakeSettingsStore{
+		setupComplete: true,
+		settings: settings.Settings{
+			PelicanURL:    "https://panel.example.com",
+			PelicanAPIKey: "test-key",
+			RouterDomain:  "mc.example.com",
+		},
+	}
+
+	manager := New()
+	synchronizer := &recordingRouteSynchronizer{
+		manager: manager,
+	}
+
+	task := NewRefreshTask(
+		store,
+		5*time.Second,
+		manager,
+		synchronizer,
+	)
+
+	err := task.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+
+	if synchronizer.calls != 1 {
+		t.Fatalf(
+			"Sync() calls = %d, want 1",
+			synchronizer.calls,
+		)
+	}
+
+	if synchronizer.source == nil {
+		t.Fatal("Sync() route source is nil")
+	}
+
+	if synchronizer.runtimePublished {
+		t.Fatal("runtime was published before route synchronization")
+	}
+
+	if manager.Discovery() == nil {
+		t.Fatal("runtime discovery service is nil")
+	}
+
+	if manager.Routing() == nil {
+		t.Fatal("runtime routing service is nil")
+	}
+}
+
+func TestRefreshTaskPreservesRuntimeWhenRouteSynchronizationFails(
+	t *testing.T,
+) {
+	store := &fakeSettingsStore{
+		setupComplete: true,
+		settings: settings.Settings{
+			PelicanURL:    "https://panel.example.com",
+			PelicanAPIKey: "test-key",
+			RouterDomain:  "mc.example.com",
+		},
+	}
+
+	existingDiscovery := &fakeDiscoveryService{}
+	existingRouting := &fakeRoutingService{}
+
+	manager := New()
+	manager.Set(existingDiscovery, existingRouting)
+
+	synchronizer := &recordingRouteSynchronizer{
+		manager: manager,
+		err:     errors.New("proxy directory unavailable"),
+	}
+
+	task := NewRefreshTask(
+		store,
+		5*time.Second,
+		manager,
+		synchronizer,
+	)
+
+	err := task.Refresh(context.Background())
+	if err == nil {
+		t.Fatal("Refresh() error = nil, want an error")
+	}
+
+	if !strings.Contains(err.Error(), "synchronize routes") {
+		t.Fatalf(
+			"Refresh() error = %q, want synchronization context",
+			err,
+		)
+	}
+
+	if synchronizer.calls != 1 {
+		t.Fatalf(
+			"Sync() calls = %d, want 1",
+			synchronizer.calls,
+		)
+	}
+
+	if manager.Discovery() != existingDiscovery {
+		t.Fatal(
+			"failed synchronization replaced the existing discovery service",
+		)
+	}
+
+	if manager.Routing() != existingRouting {
+		t.Fatal(
+			"failed synchronization replaced the existing routing service",
+		)
+	}
 }
 
 func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
@@ -54,6 +189,7 @@ func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
 		store,
 		5*time.Second,
 		New(),
+		nil,
 	)
 
 	results := make(chan error, 2)
@@ -136,6 +272,7 @@ func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 		store,
 		5*time.Second,
 		manager,
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -161,6 +298,7 @@ func TestRefreshTaskReturnsSetupStatusError(t *testing.T) {
 		store,
 		5*time.Second,
 		New(),
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -195,6 +333,7 @@ func TestRefreshTaskReturnsLoadError(t *testing.T) {
 		store,
 		5*time.Second,
 		manager,
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -241,6 +380,7 @@ func TestRefreshTaskRunDelegatesToRefresh(t *testing.T) {
 		store,
 		5*time.Second,
 		manager,
+		nil,
 	)
 
 	err := task.Run(context.Background())
