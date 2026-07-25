@@ -10,11 +10,13 @@ import (
 )
 
 type fakeRouteClient struct {
-	listCalls int
-	listErr   error
-	routes    map[string]string
-	created   map[string]string
-	deleted   []string
+	listCalls   int
+	listErr     error
+	createCalls int
+	createErr   error
+	routes      map[string]string
+	created     map[string]string
+	deleted     []string
 }
 
 func (c *fakeRouteClient) ListRoutes(
@@ -40,6 +42,12 @@ func (c *fakeRouteClient) CreateRoute(
 	hostname string,
 	backend string,
 ) error {
+	c.createCalls++
+
+	if c.createErr != nil {
+		return c.createErr
+	}
+
 	if c.created == nil {
 		c.created = make(map[string]string)
 	}
@@ -757,6 +765,76 @@ func TestControllerReconcilePropagatesListRoutesError(
 		t.Fatalf(
 			"ListRoutes() calls = %d, want 1",
 			client.listCalls,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
+
+func TestControllerReconcilePropagatesCreateRouteErrorBeforeDeletingStaleRoutes(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	createErr := errors.New("create route failed")
+
+	client := &fakeRouteClient{
+		createErr: createErr,
+		routes: map[string]string{
+			"stale.mc.example.com": "10.0.0.24:25565",
+		},
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: "survival.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, createErr) {
+		t.Fatalf(
+			"Reconcile() error = %v, want wrapped %v",
+			err,
+			createErr,
+		)
+	}
+
+	if client.listCalls != 1 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 1",
+			client.listCalls,
+		)
+	}
+
+	if client.createCalls != 1 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 1",
+			client.createCalls,
 		)
 	}
 
