@@ -14,6 +14,7 @@ type fakeRouteClient struct {
 	listErr     error
 	createCalls int
 	createErr   error
+	createOrder []string
 	deleteCalls int
 	deleteErr   error
 	routes      map[string]string
@@ -45,6 +46,7 @@ func (c *fakeRouteClient) CreateRoute(
 	backend string,
 ) error {
 	c.createCalls++
+	c.createOrder = append(c.createOrder, hostname)
 
 	if c.createErr != nil {
 		return c.createErr
@@ -1012,6 +1014,85 @@ func TestControllerReconcileReturnsCanceledContextBeforeAPICalls(
 			"created routes = %#v, want none",
 			client.created,
 		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
+
+func TestControllerReconcileCreatesRoutesInHostnameOrder(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	client := &fakeRouteClient{
+		routes: make(map[string]string),
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-zeta",
+				Hostname: "zeta.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.27",
+					Port: 25567,
+				},
+			},
+			{
+				ServerID: "server-alpha",
+				Hostname: "alpha.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+			{
+				ServerID: "server-middle",
+				Hostname: "middle.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.26",
+					Port: 25566,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	expectedOrder := []string{
+		"alpha.mc.example.com",
+		"middle.mc.example.com",
+		"zeta.mc.example.com",
+	}
+
+	if len(client.createOrder) != len(expectedOrder) {
+		t.Fatalf(
+			"CreateRoute() order = %#v, want %#v",
+			client.createOrder,
+			expectedOrder,
+		)
+	}
+
+	for index, expectedHostname := range expectedOrder {
+		if client.createOrder[index] != expectedHostname {
+			t.Fatalf(
+				"CreateRoute() order = %#v, want %#v",
+				client.createOrder,
+				expectedOrder,
+			)
+		}
 	}
 
 	if len(client.deleted) != 0 {
