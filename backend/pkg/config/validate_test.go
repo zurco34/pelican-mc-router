@@ -22,6 +22,9 @@ func TestConfigValidateInfrastructure(t *testing.T) {
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
 		},
+		Router: RouterConfig{
+			Backend: "infrared",
+		},
 	}
 
 	if err := cfg.ValidateInfrastructure(); err != nil {
@@ -45,6 +48,9 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
+		},
+		Router: RouterConfig{
+			Backend: "infrared",
 		},
 	}
 
@@ -258,6 +264,9 @@ func validConfig() Config {
 			Backend: "infrared",
 			Domain:  "mc.example.com",
 		},
+		MCRouter: MCRouterConfig{
+			APIURL: "http://mc-router:8080",
+		},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -266,5 +275,81 @@ func validConfig() Config {
 			Level:  "info",
 			Format: "json",
 		},
+	}
+}
+
+func TestConfigValidateInfrastructureValidatesSelectedRouterBackend(
+	t *testing.T,
+) {
+	tests := []struct {
+		name    string
+		update  func(*Config)
+		wantErr error
+	}{
+		{
+			name: "mc-router does not require Infrared settings",
+			update: func(cfg *Config) {
+				cfg.Router.Backend = "mc-router"
+				cfg.Infrared = InfraredConfig{}
+			},
+		},
+		{
+			name: "mc-router requires API URL",
+			update: func(cfg *Config) {
+				cfg.Router.Backend = "mc-router"
+				cfg.MCRouter.APIURL = "   "
+			},
+			wantErr: ErrMissingMCRouterAPIURL,
+		},
+		{
+			name: "mc-router rejects invalid API URL",
+			update: func(cfg *Config) {
+				cfg.Router.Backend = "mc-router"
+				cfg.MCRouter.APIURL = "ftp://mc-router:8080"
+			},
+			wantErr: ErrInvalidMCRouterAPIURL,
+		},
+		{
+			name: "Infrared does not require mc-router API URL",
+			update: func(cfg *Config) {
+				cfg.Router.Backend = "infrared"
+				cfg.MCRouter.APIURL = ""
+			},
+		},
+		{
+			name: "unsupported router backend",
+			update: func(cfg *Config) {
+				cfg.Router.Backend = "unknown"
+			},
+			wantErr: ErrUnsupportedRouterBackend,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := validConfig()
+			test.update(&cfg)
+
+			err := cfg.ValidateInfrastructure()
+
+			if test.wantErr == nil {
+				if err != nil {
+					t.Fatalf(
+						"ValidateInfrastructure() error = %v",
+						err,
+					)
+				}
+
+				return
+			}
+
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf(
+					"ValidateInfrastructure() error = %v, want %v",
+					err,
+					test.wantErr,
+				)
+			}
+		})
 	}
 }

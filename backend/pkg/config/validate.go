@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+const (
+	routerBackendMCRouter = "mc-router"
+	routerBackendInfrared = "infrared"
+)
+
 var (
 	ErrInvalidServerPort               = errors.New("server port must be between 1 and 65535")
 	ErrMissingPelicanURL               = errors.New("pelican URL is required")
@@ -17,9 +22,11 @@ var (
 	ErrMissingRouterDomain             = errors.New("router domain is required")
 	ErrMissingInfraredProxiesPath      = errors.New("infrared proxies path is required")
 	ErrMissingInfraredReloadMarkerPath = errors.New("infrared reload marker path is required")
+	ErrUnsupportedRouterBackend        = errors.New("router backend is unsupported")
+	ErrMissingMCRouterAPIURL           = errors.New("mc-router API URL is required")
+	ErrInvalidMCRouterAPIURL           = errors.New("mc-router API URL must be a valid HTTP or HTTPS URL")
+	ErrMissingDatabasePath             = errors.New("database path is required")
 )
-
-var ErrMissingDatabasePath = errors.New("database path is required")
 
 func (c Config) ValidateInfrastructure() error {
 	var validationErrors []error
@@ -38,18 +45,8 @@ func (c Config) ValidateInfrastructure() error {
 		)
 	}
 
-	if strings.TrimSpace(c.Infrared.ProxiesPath) == "" {
-		validationErrors = append(
-			validationErrors,
-			ErrMissingInfraredProxiesPath,
-		)
-	}
-
-	if strings.TrimSpace(c.Infrared.ReloadMarkerPath) == "" {
-		validationErrors = append(
-			validationErrors,
-			ErrMissingInfraredReloadMarkerPath,
-		)
+	if err := validateRouterInfrastructure(c); err != nil {
+		validationErrors = append(validationErrors, err)
 	}
 
 	if c.Discovery.Interval <= 0 {
@@ -60,6 +57,60 @@ func (c Config) ValidateInfrastructure() error {
 	}
 
 	return errors.Join(validationErrors...)
+}
+
+func validateRouterInfrastructure(cfg Config) error {
+	switch strings.TrimSpace(cfg.Router.Backend) {
+	case routerBackendMCRouter:
+		return validateMCRouterAPIURL(cfg.MCRouter.APIURL)
+
+	case routerBackendInfrared:
+		var validationErrors []error
+
+		if strings.TrimSpace(cfg.Infrared.ProxiesPath) == "" {
+			validationErrors = append(
+				validationErrors,
+				ErrMissingInfraredProxiesPath,
+			)
+		}
+
+		if strings.TrimSpace(cfg.Infrared.ReloadMarkerPath) == "" {
+			validationErrors = append(
+				validationErrors,
+				ErrMissingInfraredReloadMarkerPath,
+			)
+		}
+
+		return errors.Join(validationErrors...)
+
+	default:
+		return fmt.Errorf(
+			"%w: %q",
+			ErrUnsupportedRouterBackend,
+			cfg.Router.Backend,
+		)
+	}
+}
+
+func validateMCRouterAPIURL(value string) error {
+	rawURL := strings.TrimSpace(value)
+	if rawURL == "" {
+		return ErrMissingMCRouterAPIURL
+	}
+
+	parsedURL, err := url.ParseRequestURI(rawURL)
+	if err != nil ||
+		(parsedURL.Scheme != "http" &&
+			parsedURL.Scheme != "https") ||
+		parsedURL.Host == "" {
+		return fmt.Errorf(
+			"%w: %q",
+			ErrInvalidMCRouterAPIURL,
+			rawURL,
+		)
+	}
+
+	return nil
 }
 
 func (c Config) Validate() error {
