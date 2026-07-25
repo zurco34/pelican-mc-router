@@ -11,6 +11,7 @@ import (
 
 type fakeRouteClient struct {
 	listCalls int
+	listErr   error
 	routes    map[string]string
 	created   map[string]string
 	deleted   []string
@@ -21,6 +22,10 @@ func (c *fakeRouteClient) ListRoutes(
 ) (map[string]string, error) {
 	c.listCalls++
 
+	if c.listErr != nil {
+		return nil, c.listErr
+	}
+
 	routes := make(map[string]string, len(c.routes))
 
 	for hostname, backend := range c.routes {
@@ -29,6 +34,7 @@ func (c *fakeRouteClient) ListRoutes(
 
 	return routes, nil
 }
+
 func (c *fakeRouteClient) CreateRoute(
 	_ context.Context,
 	hostname string,
@@ -706,5 +712,65 @@ func TestControllerReconcileRejectsInvalidHostnameBeforeAPICalls(
 				)
 			}
 		})
+	}
+}
+
+func TestControllerReconcilePropagatesListRoutesError(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	listErr := errors.New("list routes failed")
+
+	client := &fakeRouteClient{
+		listErr: listErr,
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: "survival.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, listErr) {
+		t.Fatalf(
+			"Reconcile() error = %v, want wrapped %v",
+			err,
+			listErr,
+		)
+	}
+
+	if client.listCalls != 1 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 1",
+			client.listCalls,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
 	}
 }
