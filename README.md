@@ -89,6 +89,15 @@ Selected backend adapter
 
 Only one routing backend is active for a deployment.
 
+## Deployment
+
+The production-oriented Docker Compose stack includes Pelican MC Router,
+mc-router, private control-plane networking, persistent SQLite storage, and
+least-privilege container settings.
+
+See [Docker Compose deployment](docs/DEPLOYMENT.md) for installation,
+initial setup, networking, security, and upgrade instructions.
+
 ## Project status
 
 Under active development. Configuration formats and deployment behavior may
