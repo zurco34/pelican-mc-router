@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -60,6 +61,11 @@ func (c *Controller) Reconcile(
 		)
 	}
 
+	desiredHostnames := make(
+		map[string]struct{},
+		len(routes),
+	)
+
 	for _, route := range routes {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf(
@@ -67,6 +73,8 @@ func (c *Controller) Reconcile(
 				err,
 			)
 		}
+
+		desiredHostnames[route.Hostname] = struct{}{}
 
 		backend := net.JoinHostPort(
 			route.Backend.Host,
@@ -85,6 +93,41 @@ func (c *Controller) Reconcile(
 			return fmt.Errorf(
 				"mcrouter: create route %q: %w",
 				route.Hostname,
+				err,
+			)
+		}
+	}
+
+	staleHostnames := make([]string, 0)
+
+	for hostname := range currentRoutes {
+		if _, desired := desiredHostnames[hostname]; desired {
+			continue
+		}
+
+		staleHostnames = append(
+			staleHostnames,
+			hostname,
+		)
+	}
+
+	sort.Strings(staleHostnames)
+
+	for _, hostname := range staleHostnames {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf(
+				"mcrouter: reconcile routes: %w",
+				err,
+			)
+		}
+
+		if err := c.client.DeleteRoute(
+			ctx,
+			hostname,
+		); err != nil {
+			return fmt.Errorf(
+				"mcrouter: delete stale route %q: %w",
+				hostname,
 				err,
 			)
 		}
