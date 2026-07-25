@@ -944,3 +944,80 @@ func TestControllerReconcilePropagatesDeleteRouteError(
 		)
 	}
 }
+
+func TestControllerReconcileReturnsCanceledContextBeforeAPICalls(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	client := &fakeRouteClient{
+		routes: map[string]string{
+			"existing.mc.example.com": "10.0.0.24:25565",
+		},
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		ctx,
+		[]router.Route{
+			{
+				ServerID: "server-123",
+				Hostname: "survival.mc.example.com",
+				Backend: router.Backend{
+					Host: "10.0.0.25",
+					Port: 25565,
+				},
+			},
+		},
+	)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf(
+			"Reconcile() error = %v, want wrapped %v",
+			err,
+			context.Canceled,
+		)
+	}
+
+	if client.listCalls != 0 {
+		t.Fatalf(
+			"ListRoutes() calls = %d, want 0",
+			client.listCalls,
+		)
+	}
+
+	if client.createCalls != 0 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 0",
+			client.createCalls,
+		)
+	}
+
+	if client.deleteCalls != 0 {
+		t.Fatalf(
+			"DeleteRoute() calls = %d, want 0",
+			client.deleteCalls,
+		)
+	}
+
+	if len(client.created) != 0 {
+		t.Fatalf(
+			"created routes = %#v, want none",
+			client.created,
+		)
+	}
+
+	if len(client.deleted) != 0 {
+		t.Fatalf(
+			"deleted routes = %#v, want none",
+			client.deleted,
+		)
+	}
+}
