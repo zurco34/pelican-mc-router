@@ -1102,3 +1102,61 @@ func TestControllerReconcileCreatesRoutesInHostnameOrder(
 		)
 	}
 }
+
+func TestControllerReconcileDeletesRoutesInHostnameOrder(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	client := &fakeRouteClient{
+		routes: map[string]string{
+			"zeta.mc.example.com":   "10.0.0.27:25567",
+			"alpha.mc.example.com":  "10.0.0.25:25565",
+			"middle.mc.example.com": "10.0.0.26:25566",
+		},
+	}
+
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	err = controller.Reconcile(
+		context.Background(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	expectedOrder := []string{
+		"alpha.mc.example.com",
+		"middle.mc.example.com",
+		"zeta.mc.example.com",
+	}
+
+	if len(client.deleted) != len(expectedOrder) {
+		t.Fatalf(
+			"DeleteRoute() order = %#v, want %#v",
+			client.deleted,
+			expectedOrder,
+		)
+	}
+
+	for index, expectedHostname := range expectedOrder {
+		if client.deleted[index] != expectedHostname {
+			t.Fatalf(
+				"DeleteRoute() order = %#v, want %#v",
+				client.deleted,
+				expectedOrder,
+			)
+		}
+	}
+
+	if client.createCalls != 0 {
+		t.Fatalf(
+			"CreateRoute() calls = %d, want 0",
+			client.createCalls,
+		)
+	}
+}
