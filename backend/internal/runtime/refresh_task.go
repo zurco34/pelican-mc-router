@@ -50,6 +50,12 @@ type RefreshTask struct {
 	tracker             *ReconciliationTracker
 	observer            ReconciliationObserver
 	secretResolver      SecretResolver
+	policySource        router.PolicySource
+}
+
+func (r *RefreshTask) WithPolicySource(source router.PolicySource) *RefreshTask {
+	r.policySource = source
+	return r
 }
 
 func (r *RefreshTask) WithSecretResolver(resolver SecretResolver) *RefreshTask {
@@ -249,6 +255,7 @@ func (r *RefreshTask) buildRuntimeServices() (
 	routingService, err := router.New(
 		inventory,
 		runtimeSettings.RouterDomain,
+		router.WithPolicySource(r.policySource),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
