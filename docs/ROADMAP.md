@@ -18,6 +18,8 @@ endpoint, trust-boundary, bootstrap, and credential-transition contract.
 
 ## v0.4.0: Route policies
 
+- [x] Define the UUID-keyed route-policy, managed-route ownership, and preview
+  contract in [ADR-0008](adr/ADR-0008-route-policy-model.md).
 - [ ] Persist UUID-keyed route policies.
 - [ ] Validate stable primary names, aliases, exclusions, and collisions before
   a backend mutation.
