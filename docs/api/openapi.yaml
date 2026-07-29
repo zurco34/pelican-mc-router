@@ -1,50 +1,94 @@
 openapi: 3.1.0
 info:
   title: Pelican MC Router API
-  version: 1.0.0
-  description: Versioned management API. Responses never include credentials or raw backend errors.
+  version: 1.0.1
+  description: Stable v1 management API. Credentials and raw backend diagnostics are never returned.
 paths:
   /health:
-    get:
-      summary: Process liveness
-      responses: {'200': {description: OK}}
+    get: {operationId: health, summary: Process liveness, responses: {'200': {$ref: '#/components/responses/Health'}}}
   /ready:
     get:
+      operationId: readiness
       summary: Reconciliation readiness
-      responses: {'200': {description: Ready}, '503': {description: Not ready}}
+      responses: {'200': {$ref: '#/components/responses/Readiness'}, '503': {$ref: '#/components/responses/Readiness'}}
   /metrics:
+    get: {operationId: metrics, summary: Prometheus text exposition, responses: {'200': {description: Prometheus text exposition, content: {text/plain: {schema: {type: string}}}}}}
+  /api/v1/setup:
     get:
-      summary: Prometheus metrics
-      responses: {'200': {description: Prometheus text exposition}}
+      operationId: getSetupStatus
+      security: [{bootstrapBearer: []}]
+      responses: {'200': {$ref: '#/components/responses/SetupStatus'}, '401': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+    post:
+      operationId: configureSetup
+      security: [{bootstrapBearer: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SettingsRequest'}}}}
+      responses: {'204': {description: Setup activated}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/v1/status:
-    get:
-      summary: Cached operational status
-      security: [{bearerAuth: []}]
-      responses: {'200': {description: Status}, '401': {description: Authentication required}, '403': {description: Access denied}}
+    get: {operationId: getStatus, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/Status'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/servers:
-    get:
-      summary: Cached discovered servers
-      security: [{bearerAuth: []}]
-      responses: {'200': {description: Servers}}
+    get: {operationId: listServers, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/Servers'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/routes:
-    get:
-      summary: Cached generated routes
-      security: [{bearerAuth: []}]
-      responses: {'200': {description: Routes}}
+    get: {operationId: listRoutes, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/Routes'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/routes/preview:
-    get:
-      summary: Route preview without backend mutation
-      security: [{bearerAuth: []}]
-      responses: {'200': {description: Preview}}
+    get: {operationId: previewRoutes, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/RoutePreview'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/operational-history:
     get:
-      summary: Bounded safe operational history
-      security: [{bearerAuth: []}]
-      parameters:
-        - in: query
-          name: limit
-          schema: {type: integer, minimum: 1, maximum: 100}
-      responses: {'200': {description: Events}, '400': {description: Invalid limit}}
+      operationId: listOperationalHistory
+      security: [{oidcBearer: []}]
+      parameters: [{$ref: '#/components/parameters/HistoryLimit'}]
+      responses: {'200': {$ref: '#/components/responses/OperationalHistory'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/v1/dashboard/reconcile:
+    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}}}
+  /api/v1/settings:
+    put: {operationId: updateSettings, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SettingsRequest'}}}}, responses: {'204': {description: Settings activated}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}}}
+  /api/v1/route-policies:
+    get: {operationId: listRoutePolicies, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/RoutePolicies'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
+    post: {operationId: createRoutePolicy, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicyRequest'}}}}, responses: {'201': {$ref: '#/components/responses/RoutePolicy'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
+  /api/v1/route-policies/{serverUUID}:
+    parameters: [{$ref: '#/components/parameters/ServerUUID'}]
+    put: {operationId: updateRoutePolicy, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicyRequest'}}}}, responses: {'200': {$ref: '#/components/responses/RoutePolicy'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
+    delete:
+      operationId: deleteRoutePolicy
+      security: [{oidcBearer: []}]
+      parameters: [{name: revision, in: query, required: true, schema: {type: integer, minimum: 1}}]
+      responses: {'204': {description: Deleted}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
 components:
   securitySchemes:
-    bearerAuth: {type: http, scheme: bearer}
+    bootstrapBearer: {type: http, scheme: bearer, description: Mounted one-time bootstrap token; only while setup is incomplete.}
+    oidcBearer: {type: http, scheme: bearer, bearerFormat: JWT, description: Verified OIDC bearer. Viewer reads topology; operator performs mutations.}
+  parameters:
+    HistoryLimit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}, description: Maximum events; defaults to 100.}
+    ServerUUID: {name: serverUUID, in: path, required: true, schema: {type: string, minLength: 1}}
+  responses:
+    Error: {description: Sanitized error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Health: {description: OK, content: {text/plain: {schema: {type: string, example: OK}}}}
+    Readiness: {description: Readiness state, content: {application/json: {schema: {$ref: '#/components/schemas/Readiness'}}}}
+    SetupStatus: {description: Setup state, content: {application/json: {schema: {$ref: '#/components/schemas/SetupStatus'}}}}
+    Status: {description: Cached status, content: {application/json: {schema: {$ref: '#/components/schemas/Status'}}}}
+    Servers: {description: Discovered servers, content: {application/json: {schema: {$ref: '#/components/schemas/Servers'}}}}
+    Routes: {description: Generated routes, content: {application/json: {schema: {$ref: '#/components/schemas/Routes'}}}}
+    RoutePreview: {description: Cached route preview, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePreview'}}}}
+    RoutePolicies: {description: Policies, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicies'}}}}
+    RoutePolicy: {description: Policy, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicy'}}}}
+    OperationalHistory: {description: Bounded events, content: {application/json: {schema: {$ref: '#/components/schemas/OperationalHistory'}}}}
+    ManualReconcile: {description: Reconciliation accepted, content: {application/json: {schema: {$ref: '#/components/schemas/ManualReconcile'}}}}
+  schemas:
+    Error: {type: object, required: [error], properties: {error: {type: string}}}
+    Readiness: {type: object, required: [ready, reason], properties: {ready: {type: boolean}, reason: {type: string, enum: [ready, setup_incomplete, reconciliation_pending, reconciliation_failed, status_unavailable]}}}
+    SetupStatus: {type: object, required: [completed], properties: {completed: {type: boolean}}}
+    SettingsRequest: {type: object, required: [pelican_url, pelican_secret_name, router_domain], properties: {pelican_url: {type: string}, pelican_secret_name: {type: string, description: Bounded mounted-secret reference, not a credential value.}, router_domain: {type: string}}, additionalProperties: false}
+    Build: {type: object, properties: {version: {type: string}, revision: {type: string}, built_at: {type: string}}}
+    RouteChanges: {type: object, required: [desired, created, updated, deleted, changed], properties: {desired: {type: integer}, created: {type: integer}, updated: {type: integer}, deleted: {type: integer}, changed: {type: boolean}}}
+    Reconciliation: {type: object, properties: {in_progress: {type: boolean}, last_outcome: {type: [string, 'null'], enum: [not_configured, success, failure, 'null']}, last_started_at: {type: [string, 'null'], format: date-time}, last_completed_at: {type: [string, 'null'], format: date-time}, last_success_at: {type: [string, 'null'], format: date-time}, last_duration_ms: {type: integer}, consecutive_failures: {type: integer}, last_error: {type: [string, 'null']}, route_changes: {$ref: '#/components/schemas/RouteChanges'}}}
+    Status: {type: object, required: [build, setup_completed, ready, readiness_reason, reconciliation], properties: {build: {$ref: '#/components/schemas/Build'}, setup_completed: {type: boolean}, ready: {type: boolean}, readiness_reason: {type: string}, reconciliation: {$ref: '#/components/schemas/Reconciliation'}}}
+    Server: {type: object, additionalProperties: true, description: Authenticated topology server record.}
+    Route: {type: object, additionalProperties: true, description: Authenticated route/backend record.}
+    Servers: {type: object, required: [servers], properties: {servers: {type: array, items: {$ref: '#/components/schemas/Server'}}}}
+    Routes: {type: object, required: [routes], properties: {routes: {type: array, items: {$ref: '#/components/schemas/Route'}}}}
+    RoutePreview: {type: object, required: [desired, routes], properties: {desired: {type: integer}, routes: {type: array, items: {$ref: '#/components/schemas/Route'}}}}
+    RoutePolicyRequest: {type: object, properties: {server_uuid: {type: string}, primary_hostname: {type: string}, aliases: {type: array, items: {type: string}}, excluded: {type: boolean}, revision: {type: integer, minimum: 1}}, additionalProperties: false}
+    RoutePolicy: {allOf: [{$ref: '#/components/schemas/RoutePolicyRequest'}]}
+    RoutePolicies: {type: object, required: [policies], properties: {policies: {type: array, items: {$ref: '#/components/schemas/RoutePolicy'}}}}
+    OperationalEvent: {type: object, additionalProperties: true, description: Allowlisted reconciliation outcome and numeric diagnostics.}
+    OperationalHistory: {type: object, required: [events], properties: {events: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/OperationalEvent'}}}}
+    ManualReconcile: {type: object, additionalProperties: true}
