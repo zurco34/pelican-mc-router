@@ -111,6 +111,11 @@ cleanup() {
     printf 'Project name: %s\n' "${COMPOSE_PROJECT_NAME}"
   fi
 
+  if [[ -n "${SMOKE_SECRETS_DIR:-}" ]]; then
+    rm -f -- "${SMOKE_SECRETS_DIR}/bootstrap-token"
+    rmdir -- "${SMOKE_SECRETS_DIR}" || true
+  fi
+
   exit "${exit_code}"
 }
 
@@ -158,6 +163,12 @@ export PELICAN_MC_ROUTER_BIND_ADDRESS="127.0.0.1"
 export PELICAN_MC_ROUTER_HTTP_PORT="${SMOKE_HTTP_PORT:-38080}"
 
 export PELICAN_MC_ROUTER_IMAGE="${PELICAN_MC_ROUTER_IMAGE:-pelican-mc-router:smoke-${SMOKE_ID}}"
+
+readonly SMOKE_SECRETS_DIR="$(mktemp -d /tmp/pelican-mc-router-smoke-secrets.XXXXXX)"
+chmod 700 "${SMOKE_SECRETS_DIR}"
+printf '%s\n' 'smoke-bootstrap-token' >"${SMOKE_SECRETS_DIR}/bootstrap-token"
+chmod 600 "${SMOKE_SECRETS_DIR}/bootstrap-token"
+export PELICAN_MC_ROUTER_SECRETS_HOST_DIR="${SMOKE_SECRETS_DIR}"
 
 export PELICAN_MC_ROUTER_VERSION="smoke"
 export PELICAN_MC_ROUTER_REVISION="$(

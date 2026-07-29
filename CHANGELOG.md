@@ -12,6 +12,9 @@ API behavior, and deployment details may change between minor releases.
 - Add a bounded reader contract and read-only Compose mount for future
   file-backed bootstrap and Pelican credential secrets. Secret values remain
   outside application configuration and `.env` files.
+- Require the mounted bootstrap bearer token for setup while the database is
+  uninitialized. Setup routes disappear after successful setup; the token is
+  never persisted, returned, logged, or added to metrics.
 
 ## 0.2.0 - 2026-07-29
 
