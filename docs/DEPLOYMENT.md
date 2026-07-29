@@ -355,6 +355,25 @@ reconciliation. Direct public dashboard exposure is unsupported. See
 [ADR-0005](adr/ADR-0005-dashboard-security-model.md) for the security model and
 the prerequisites for future write actions.
 
+### Offline SQLite recovery
+
+Stop the service before using the offline recovery utility; it must never copy,
+restore, or compact a live database. The command does not print database rows
+or credentials. Create backups on storage protected by the operator and verify
+them before a restore:
+
+```bash
+cd backend
+go run ./cmd/sqlite-recovery -operation integrity -source /path/to/router.db
+go run ./cmd/sqlite-recovery -operation backup -source /path/to/router.db -target /path/to/router.db.backup
+go run ./cmd/sqlite-recovery -operation restore -source /path/to/router.db.backup -target /path/to/router.db.restored
+```
+
+Restore targets must be distinct and must not already exist. Replace the
+service database only while the service is stopped, retain the original until
+startup and integrity verification succeed, and roll back by restoring that
+original backup. `compact` runs SQLite `VACUUM` and likewise requires downtime.
+
 ### Optional dashboard OIDC protection
 
 Set `PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED=true` only when an authenticated
