@@ -781,6 +781,28 @@ func TestListRoutes(t *testing.T) {
 	}
 }
 
+func TestPreviewRoutes(t *testing.T) {
+	server := newTestServer(&fakeDiscoveryService{}, &fakeRoutingService{routes: []routing.Route{{
+		ServerID: "server-uuid", Hostname: "preview.mc.example.com",
+		Backend: routing.Backend{Host: "192.168.1.10", Port: 25565},
+	}}}, &fakeSetupService{})
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/routes/preview", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var response struct {
+		Desired int             `json:"desired"`
+		Routes  []routing.Route `json:"routes"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if response.Desired != 1 || len(response.Routes) != 1 {
+		t.Fatalf("preview = %#v", response)
+	}
+}
+
 func TestListRoutesReturnsInternalServerError(t *testing.T) {
 	routingService := &fakeRoutingService{
 		err: errors.New("route generation failed"),

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
+	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/secretfile"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -113,6 +114,7 @@ func (s *Server) Router() http.Handler {
 	router.Post("/api/v1/dashboard/reconcile", s.managementOperator(s.reconcileDashboard))
 	router.Get("/api/v1/servers", s.managementViewer(s.listServers))
 	router.Get("/api/v1/routes", s.managementViewer(s.listRoutes))
+	router.Get("/api/v1/routes/preview", s.managementViewer(s.previewRoutes))
 	router.Get("/api/v1/setup", s.bootstrapOnly(s.getSetupStatus))
 	router.Post("/api/v1/setup", s.bootstrapOnly(s.configureSetup))
 	router.Put("/api/v1/settings", s.managementOperator(s.updateSettings))
@@ -404,6 +406,37 @@ func (s *Server) listRoutes(
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"routes": routes,
+	})
+}
+
+type routePreviewResponse struct {
+	Desired int             `json:"desired"`
+	Routes  []routing.Route `json:"routes"`
+}
+
+// previewRoutes returns the cached inventory's planner output. The runtime
+// inventory is seeded only by reconciliation, so this read path makes no
+// Pelican or routing-backend request.
+func (s *Server) previewRoutes(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	routingService := s.runtime.Routing()
+	if routingService == nil {
+		writeSetupIncomplete(w)
+		return
+	}
+
+	routes, err := routingService.Routes(r.Context())
+	if err != nil {
+		slog.Warn("generate cached route preview")
+		writeJSONError(w, http.StatusServiceUnavailable, "route preview unavailable")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, routePreviewResponse{
+		Desired: len(routes),
+		Routes:  routes,
 	})
 }
 
