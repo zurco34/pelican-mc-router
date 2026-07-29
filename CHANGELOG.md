@@ -7,6 +7,8 @@ API behavior, and deployment details may change between minor releases.
 
 ## Unreleased
 
+## 0.1.3
+
 ### Added
 
 - Add coordinated graceful shutdown for SIGINT and SIGTERM, including the HTTP
