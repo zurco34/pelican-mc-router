@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 - 2026-07-29
+
+### Added
+
+- Bounded, persisted operational history containing only fixed reconciliation
+  outcomes and numeric route-change diagnostics.
+- Viewer-authorized recent-event API and dashboard activity view.
+- Safe Prometheus alert-rule examples for reconciliation failures.
+
+### Changed
+
+- Operational history is retained locally with bounded size and excludes errors,
+  credentials, topology, identities, and unbounded payloads.
+
 ## 0.4.0 - 2026-07-29
 
 ### Added
