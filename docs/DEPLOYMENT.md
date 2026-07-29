@@ -81,7 +81,7 @@ PELICAN_MC_ROUTER_HTTP_PORT=8080
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.1
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.2
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -127,7 +127,10 @@ Check application health:
 curl --fail http://127.0.0.1:8080/health
 ```
 
-Expected response:
+`/health` verifies process liveness. Before initial setup, `/ready` correctly
+returns HTTP 503 with reason `setup_incomplete`.
+
+Expected `/health` response:
 
 ```text
 OK
@@ -208,6 +211,18 @@ Expected response:
 ```json
 {"completed":true}
 ```
+
+After setup completes, verify observability endpoints:
+
+```bash
+curl --fail http://127.0.0.1:8080/ready
+curl --fail http://127.0.0.1:8080/api/v1/status
+curl --fail http://127.0.0.1:8080/metrics
+```
+
+`/ready` should return HTTP 200 after setup and successful reconciliation.
+`/api/v1/status` shows cached reconciliation state, and `/metrics` returns
+Prometheus text exposition.
 
 Inspect discovered servers:
 
@@ -364,10 +379,10 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.2
 ```
 
-Replace `0.2.0` with the release being installed.
+Replace `0.1.2` with the exact release being installed.
 
 Pull the configured images and recreate the containers:
 
@@ -386,8 +401,18 @@ podman-compose up --detach
 Do not use `--volumes` during an upgrade. The named volume contains the SQLite
 database and application configuration.
 
-Verify health after the upgrade:
+No database migration or volume removal is required. Retain the existing named
+volume and do not use `docker compose down --volumes` during an upgrade.
+
+Verify the endpoints after the upgrade:
 
 ```bash
 curl --fail http://127.0.0.1:8080/health
+curl --fail http://127.0.0.1:8080/ready
+curl --fail http://127.0.0.1:8080/api/v1/status
+curl --fail http://127.0.0.1:8080/metrics
 ```
+
+`/ready` may temporarily return HTTP 503 while startup reconciliation runs.
+Retry after a short wait; if it remains unavailable, use its JSON reason and
+`/api/v1/status` to diagnose the condition.

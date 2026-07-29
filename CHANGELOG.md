@@ -7,12 +7,27 @@ API behavior, and deployment details may change between minor releases.
 
 ## Unreleased
 
+## 0.1.2
+
+Patch release adding reconciliation readiness, cached status reporting, and
+Prometheus metrics.
+
 ### Added
 
-- Add cached reconciliation status tracking and the `/api/v1/status` and
-  `/ready` observability endpoints.
-- Add the Prometheus `/metrics` endpoint with reconciliation counters, duration
-  histogram, state gauges, and standard Go and process collectors.
+- Add process-local, race-safe reconciliation status tracking with sanitized
+  public error summaries. Reconciliation and metric state reset on restart;
+  startup reconciliation repopulates current status and gauges, while
+  reconciliation counters and histogram history start over from zero.
+- Add `GET /api/v1/status` for cached reconciliation state and `GET /ready`
+  with stable reasons: `setup_incomplete`, `reconciliation_pending`,
+  `reconciliation_failed`, `status_unavailable`, and `ready`.
+- Preserve `GET /health` as unchanged process liveness and preserve
+  last-known-good runtime services after failed reconciliation.
+- Add `GET /metrics` with the reconciliation counter, duration histogram, and
+  last-success, consecutive-failures, and in-progress gauges.
+- Add standard Prometheus Go runtime and process collectors.
+- Use fixed, low-cardinality reconciliation result labels only:
+  `not_configured`, `success`, and `failure`.
 
 ## 0.1.1
 
