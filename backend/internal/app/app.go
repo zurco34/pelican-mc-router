@@ -18,6 +18,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
 	"github.com/zurco34/pelican-mc-router/internal/retry"
+	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/scheduler"
@@ -47,6 +48,7 @@ func Run(ctx context.Context) error {
 	defer db.Close()
 
 	settingsStore := settings.NewStore(db)
+	routePolicyStore := routepolicy.NewStore(db)
 	secretReader, err := secretfile.New(cfg.Secrets.Directory)
 	if err != nil {
 		return fmt.Errorf("create secret reader: %w", err)
@@ -124,7 +126,7 @@ func Run(ctx context.Context) error {
 		reconciliationTracker,
 		observability.NewHandler(metricsRegistry),
 		buildinfo.Current(),
-	).WithDashboard(dashboard.NewService(
+	).WithRoutePolicies(routePolicyStore).WithDashboard(dashboard.NewService(
 		setupService,
 		reconciliationTracker,
 		buildinfo.Current(),
