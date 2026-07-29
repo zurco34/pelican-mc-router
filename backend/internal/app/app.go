@@ -99,6 +99,7 @@ func Run(ctx context.Context) error {
 		reconciliationMetrics,
 		toRetryConfig(cfg.Retry),
 	).WithSecretResolver(runtime.SecretResolverFunc(secretReader.Read))
+	refresher.WithPolicySource(routePolicyStore)
 
 	setupService := setup.NewService(
 		settingsStore,
