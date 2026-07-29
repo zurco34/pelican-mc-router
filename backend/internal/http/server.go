@@ -303,10 +303,6 @@ func (s *Server) WithBootstrapAuthorization(authorizer BootstrapAuthorizer) *Ser
 
 func (s *Server) bootstrapOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.bootstrapAuth == nil {
-			next(w, r)
-			return
-		}
 		completed, err := s.setup.IsSetupComplete(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "setup status unavailable")
@@ -314,6 +310,10 @@ func (s *Server) bootstrapOnly(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if completed {
 			http.NotFound(w, r)
+			return
+		}
+		if s.bootstrapAuth == nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "bootstrap authentication unavailable")
 			return
 		}
 		if err := s.bootstrapAuth.Authorize(r); err != nil {

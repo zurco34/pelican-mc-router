@@ -146,7 +146,7 @@ func newTestServer(
 		setupService,
 		runtime.NewReconciliationTracker(),
 		http.NotFoundHandler(),
-	)
+	).WithBootstrapAuthorization(&fakeBootstrapAuthorizer{})
 }
 
 func TestHealthHandler(t *testing.T) {
@@ -866,9 +866,7 @@ func TestGetSetupStatus(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
-		&fakeSetupService{
-			completed: true,
-		},
+		&fakeSetupService{},
 	)
 
 	request := httptest.NewRequest(
@@ -904,8 +902,8 @@ func TestGetSetupStatus(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if !response.Completed {
-		t.Errorf("completed = false, want true")
+	if response.Completed {
+		t.Errorf("completed = true, want false")
 	}
 }
 
@@ -939,7 +937,35 @@ func TestBootstrapOnlySetupRoutes(t *testing.T) {
 		})
 	}
 }
-func TestGetSetupStatusReturnsInternalServerError(t *testing.T) {
+
+func TestBootstrapOnlySetupRoutesRemainClosedWithoutAuthorizer(t *testing.T) {
+	tests := []struct {
+		name       string
+		completed  bool
+		setupErr   error
+		wantStatus int
+	}{
+		{name: "completed after restart", completed: true, wantStatus: http.StatusNotFound},
+		{name: "incomplete fails closed", wantStatus: http.StatusServiceUnavailable},
+		{name: "setup lookup failure", setupErr: errors.New("database unavailable"), wantStatus: http.StatusServiceUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runtimeManager := runtime.New()
+			runtimeManager.Set(&fakeDiscoveryService{}, &fakeRoutingService{})
+			server := NewServer(runtimeManager, &fakeSetupService{completed: test.completed, err: test.setupErr}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/setup", nil))
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			if strings.Contains(recorder.Body.String(), "database unavailable") {
+				t.Fatal("setup error exposed in response")
+			}
+		})
+	}
+}
+func TestGetSetupStatusReturnsServiceUnavailableWhenSetupLookupFails(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
@@ -957,11 +983,11 @@ func TestGetSetupStatusReturnsInternalServerError(t *testing.T) {
 
 	server.Router().ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusInternalServerError {
+	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf(
 			"status code = %d, want %d",
 			recorder.Code,
-			http.StatusInternalServerError,
+			http.StatusServiceUnavailable,
 		)
 	}
 
@@ -973,7 +999,7 @@ func TestGetSetupStatusReturnsInternalServerError(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	const expected = "failed to get setup status"
+	const expected = "setup status unavailable"
 
 	if response.Error != expected {
 		t.Errorf(
@@ -1367,7 +1393,7 @@ func TestConfigureSetupReturnsBadRequestForMultipleJSONValues(t *testing.T) {
 		)
 	}
 }
-func TestConfigureSetupReturnsInternalServerError(t *testing.T) {
+func TestConfigureSetupFailsClosedWhenSetupLookupFails(t *testing.T) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
@@ -1391,11 +1417,11 @@ func TestConfigureSetupReturnsInternalServerError(t *testing.T) {
 
 	server.Router().ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusInternalServerError {
+	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf(
 			"status code = %d, want %d",
 			recorder.Code,
-			http.StatusInternalServerError,
+			http.StatusServiceUnavailable,
 		)
 	}
 
@@ -1407,11 +1433,11 @@ func TestConfigureSetupReturnsInternalServerError(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if response.Error != "failed to configure setup" {
+	if response.Error != "setup status unavailable" {
 		t.Errorf(
 			"error = %q, want %q",
 			response.Error,
-			"failed to configure setup",
+			"setup status unavailable",
 		)
 	}
 }
@@ -1469,15 +1495,13 @@ func TestUpdateSettingsReturnsBadRequestForMissingRouterDomain(
 	}
 }
 
-func TestConfigureSetupReturnsConflictWhenAlreadyConfigured(
+func TestConfigureSetupReturnsNotFoundWhenAlreadyConfigured(
 	t *testing.T,
 ) {
 	server := newTestServer(
 		&fakeDiscoveryService{},
 		&fakeRoutingService{},
-		&fakeSetupService{
-			err: setup.ErrAlreadyConfigured,
-		},
+		&fakeSetupService{completed: true},
 	)
 
 	request := httptest.NewRequest(
@@ -1495,31 +1519,14 @@ func TestConfigureSetupReturnsConflictWhenAlreadyConfigured(
 
 	server.Router().ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusConflict {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf(
 			"status code = %d, want %d",
 			recorder.Code,
-			http.StatusConflict,
+			http.StatusNotFound,
 		)
 	}
 
-	var response struct {
-		Error string `json:"error"`
-	}
-
-	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	const expected = "setup has already been completed"
-
-	if response.Error != expected {
-		t.Errorf(
-			"error = %q, want %q",
-			response.Error,
-			expected,
-		)
-	}
 }
 
 func TestListServersSetupIncomplete(t *testing.T) {
