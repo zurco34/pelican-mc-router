@@ -40,7 +40,10 @@ func newRouteController(
 			)
 		}
 
-		controller, err := mcrouter.NewController(client)
+		controller, err := mcrouter.NewController(
+			client,
+			mcrouter.WithManagedDomain(cfg.Router.Domain),
+		)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"create mc-router controller: %w",

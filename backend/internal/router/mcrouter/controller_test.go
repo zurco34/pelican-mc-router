@@ -3,6 +3,7 @@ package mcrouter
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -318,6 +319,27 @@ func TestControllerReconcileDeletesStaleRoute(t *testing.T) {
 			client.deleted[0],
 			staleHostname,
 		)
+	}
+}
+
+func TestControllerReconcilePreservesUnmanagedRoutes(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeRouteClient{routes: map[string]string{
+		"stale.mc.example.com":  "192.168.1.10:25565",
+		"unmanaged.example.net": "192.168.1.11:25565",
+	}}
+	controller, err := NewController(client, WithManagedDomain("mc.example.com"))
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	_, err = controller.ReconcileWithResult(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ReconcileWithResult() error = %v", err)
+	}
+	if !reflect.DeepEqual(client.deleted, []string{"stale.mc.example.com"}) {
+		t.Fatalf("deleted routes = %#v", client.deleted)
 	}
 }
 
