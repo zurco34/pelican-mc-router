@@ -19,6 +19,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
 	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
+	"github.com/zurco34/pelican-mc-router/pkg/buildinfo"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
@@ -111,12 +112,15 @@ func Run(ctx context.Context) error {
 		setupService,
 		reconciliationTracker,
 		observability.NewHandler(metricsRegistry),
+		buildinfo.Current(),
 	).Router()
 
 	address := serverAddress(cfg.Server)
 
 	log.Info().
 		Str("address", address).
+		Str("version", buildinfo.Version).
+		Str("revision", buildinfo.Revision).
 		Msg("starting HTTP server")
 
 	server := newHTTPServer(address, httpRouter, cfg.Server)

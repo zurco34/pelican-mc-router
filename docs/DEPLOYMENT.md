@@ -255,8 +255,8 @@ curl --fail http://127.0.0.1:8080/metrics
 ```
 
 `/ready` should return HTTP 200 after setup and successful reconciliation.
-`/api/v1/status` shows cached reconciliation state, and `/metrics` returns
-Prometheus text exposition.
+`/api/v1/status` shows cached reconciliation state and the running build
+version/revision, and `/metrics` returns Prometheus text exposition.
 
 Inspect discovered servers:
 

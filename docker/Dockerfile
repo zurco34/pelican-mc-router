@@ -5,6 +5,9 @@ ARG ALPINE_VERSION=3.24
 
 FROM golang:${GO_VERSION}-bookworm AS build
 
+ARG VERSION=dev
+ARG REVISION=unknown
+
 WORKDIR /src/backend
 
 COPY backend/go.mod backend/go.sum ./
@@ -20,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     GOOS=linux \
     go build \
         -trimpath \
-        -ldflags="-s -w" \
+        -ldflags="-s -w -X github.com/zurco34/pelican-mc-router/pkg/buildinfo.Version=${VERSION} -X github.com/zurco34/pelican-mc-router/pkg/buildinfo.Revision=${REVISION}" \
         -o /out/pelican-mc-router \
         ./cmd/server
 

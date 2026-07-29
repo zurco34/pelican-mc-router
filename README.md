@@ -113,7 +113,7 @@ Only one routing backend is active for a deployment.
   the latest completed configured reconciliation has succeeded. A reconciliation
   failure makes it not ready until a later reconciliation succeeds.
 - `GET /api/v1/status` returns the setup state, readiness result and reason,
-  plus cached reconciliation fields: `in_progress`, completed outcome and
+	build version and revision, plus cached reconciliation fields: `in_progress`, completed outcome and
   timestamps, duration, consecutive failures, and a sanitized error summary.
   It does not trigger discovery or backend work.
 - `GET /metrics` exposes Prometheus text metrics. It includes standard Go and

@@ -16,6 +16,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
+	"github.com/zurco34/pelican-mc-router/pkg/buildinfo"
 	"github.com/zurco34/pelican-mc-router/pkg/models"
 )
 
@@ -181,10 +182,32 @@ type testReconciliationResponse struct {
 }
 
 type testStatusResponse struct {
+	Build           buildinfo.Info             `json:"build"`
 	SetupCompleted  bool                       `json:"setup_completed"`
 	Ready           bool                       `json:"ready"`
 	ReadinessReason string                     `json:"readiness_reason"`
 	Reconciliation  testReconciliationResponse `json:"reconciliation"`
+}
+
+func TestStatusEndpointIncludesBuildIdentity(t *testing.T) {
+	server := NewServer(
+		runtime.New(),
+		&fakeSetupService{},
+		runtime.NewReconciliationTracker(),
+		http.NotFoundHandler(),
+		buildinfo.Info{Version: "0.1.3", Revision: "abc123"},
+	)
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var body testStatusResponse
+	decodeStrictJSON(t, recorder.Body.Bytes(), &body)
+	if body.Build != (buildinfo.Info{Version: "0.1.3", Revision: "abc123"}) {
+		t.Fatalf("build = %#v", body.Build)
+	}
 }
 
 func TestStatusEndpoint(t *testing.T) {
