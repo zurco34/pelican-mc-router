@@ -14,6 +14,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
+	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -48,6 +49,17 @@ type fakeSetupService struct {
 	completed bool
 	err       error
 	received  settings.Settings
+}
+
+type fakeOperationalHistoryStore struct {
+	events []operationalhistory.Event
+	err    error
+	limit  int
+}
+
+func (f *fakeOperationalHistoryStore) List(_ context.Context, limit int) ([]operationalhistory.Event, error) {
+	f.limit = limit
+	return f.events, f.err
 }
 
 type fakeStatusProvider struct {
@@ -1558,5 +1570,30 @@ func TestListRoutesSetupIncomplete(t *testing.T) {
 			recorder.Code,
 			http.StatusServiceUnavailable,
 		)
+	}
+}
+
+func TestOperationalHistoryEndpointIsBoundedAndSafe(t *testing.T) {
+	store := &fakeOperationalHistoryStore{events: []operationalhistory.Event{{Kind: operationalhistory.KindReconciliation, Outcome: operationalhistory.OutcomeSuccess, Desired: 2}}}
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithOperationalHistory(store)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/operational-history?limit=1", nil)
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if store.limit != 1 {
+		t.Fatalf("history limit = %d, want 1", store.limit)
+	}
+	if strings.Contains(recorder.Body.String(), "error") {
+		t.Fatalf("response must not contain error data: %s", recorder.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/operational-history?limit=101", nil)
+	recorder = httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("invalid limit status = %d, want %d", recorder.Code, http.StatusBadRequest)
 	}
 }
