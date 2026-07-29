@@ -27,6 +27,16 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -o /out/pelican-mc-router \
         ./cmd/server
 
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    go build \
+        -trimpath \
+        -ldflags="-s -w -X github.com/zurco34/pelican-mc-router/pkg/buildinfo.Version=${VERSION} -X github.com/zurco34/pelican-mc-router/pkg/buildinfo.Revision=${REVISION}" \
+        -o /out/sqlite-recovery \
+        ./cmd/sqlite-recovery
+
 FROM alpine:${ALPINE_VERSION} AS runtime
 
 ARG VERSION=dev
@@ -61,6 +71,11 @@ COPY --from=build \
     --chown=pelican:pelican \
     /out/pelican-mc-router \
     /usr/local/bin/pelican-mc-router
+
+COPY --from=build \
+    --chown=pelican:pelican \
+    /out/sqlite-recovery \
+    /usr/local/bin/sqlite-recovery
 
 ENV PELICAN_MC_ROUTER_SERVER_PORT=8080 \
     PELICAN_MC_ROUTER_DATABASE_PATH=/app/data/pelican-mc-router.db

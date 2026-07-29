@@ -354,10 +354,12 @@ or credentials. Create backups on storage protected by the operator and verify
 them before a restore:
 
 ```bash
-cd backend
-go run ./cmd/sqlite-recovery -operation integrity -source /path/to/router.db
-go run ./cmd/sqlite-recovery -operation backup -source /path/to/router.db -target /path/to/router.db.backup
-go run ./cmd/sqlite-recovery -operation restore -source /path/to/router.db.backup -target /path/to/router.db.restored
+docker run --rm --entrypoint sqlite-recovery \
+  -v "$PWD/data:/data:ro" ghcr.io/zurco34/pelican-mc-router:1.0.1 \
+  -operation integrity -source /data/pelican-mc-router.db
+
+# Use a separate writable, operator-protected target mount for backup/restore.
+# Podman supports the same offline --entrypoint invocation.
 ```
 
 Restore targets must be distinct and must not already exist. Replace the
