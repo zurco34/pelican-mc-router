@@ -20,12 +20,12 @@ endpoint, trust-boundary, bootstrap, and credential-transition contract.
 
 - [x] Define the UUID-keyed route-policy, managed-route ownership, and preview
   contract in [ADR-0008](adr/ADR-0008-route-policy-model.md).
-- [ ] Persist UUID-keyed route policies.
-- [ ] Validate stable primary names, aliases, exclusions, and collisions before
+- [x] Persist UUID-keyed route policies.
+- [x] Validate stable primary names, aliases, exclusions, and collisions before
   a backend mutation.
-- [ ] Establish managed-route ownership and single-instance policy before
-  expanding backend mutations.
-- [ ] Add authenticated route preview and policy management.
+- [x] Establish a managed-route boundary for mc-router before expanding backend
+  mutations; one active writer remains the supported topology.
+- [x] Add authenticated route preview and policy-management APIs.
 
 ## v0.5.0: Operational history
 

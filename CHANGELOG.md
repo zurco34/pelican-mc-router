@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- UUID-keyed route policies with primary hostnames, aliases, exclusions, and
+  optimistic revisions.
+- Viewer-authorized route preview and policy reads, plus operator-authorized
+  policy mutations.
+- Cached reconciliation inventory for read-only route views without
+  request-time Pelican discovery.
+
+### Changed
+
+- Reconciliation plans the complete policy-aware route set before backend
+  mutation and uses immutable Pelican UUIDs as route identity.
+- mc-router only deletes stale routes within its configured managed domain;
+  deployments support one active control-plane writer per managed boundary.
+
 All notable changes to Pelican MC Router are documented in this file.
 
 The project follows Semantic Versioning. Until version `1.0.0`, configuration,
