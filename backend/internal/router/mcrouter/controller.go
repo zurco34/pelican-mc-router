@@ -41,20 +41,37 @@ type routeClient interface {
 }
 
 type Controller struct {
-	mu     sync.Mutex
-	client routeClient
+	mu            sync.Mutex
+	client        routeClient
+	managedDomain string
+}
+
+type Option func(*Controller)
+
+// WithManagedDomain limits destructive reconciliation to a domain namespace.
+func WithManagedDomain(domain string) Option {
+	return func(controller *Controller) {
+		controller.managedDomain = strings.Trim(strings.ToLower(strings.TrimSpace(domain)), ".")
+	}
 }
 
 func NewController(
 	client routeClient,
+	options ...Option,
 ) (*Controller, error) {
 	if client == nil {
 		return nil, ErrRouteClientRequired
 	}
 
-	return &Controller{
+	controller := &Controller{
 		client: client,
-	}, nil
+	}
+	for _, option := range options {
+		if option != nil {
+			option(controller)
+		}
+	}
+	return controller, nil
 }
 
 func isValidHostname(hostname string) bool {
@@ -249,6 +266,9 @@ func (c *Controller) ReconcileWithResult(
 	staleHostnames := make([]string, 0)
 
 	for hostname := range currentRoutes {
+		if !c.owns(hostname) {
+			continue
+		}
 		if _, desired := desiredBackends[hostname]; desired {
 			continue
 		}
@@ -284,4 +304,12 @@ func (c *Controller) ReconcileWithResult(
 	}
 
 	return result, nil
+}
+
+func (c *Controller) owns(hostname string) bool {
+	if c.managedDomain == "" {
+		return true
+	}
+	hostname = strings.Trim(strings.ToLower(strings.TrimSpace(hostname)), ".")
+	return hostname == c.managedDomain || strings.HasSuffix(hostname, "."+c.managedDomain)
 }
