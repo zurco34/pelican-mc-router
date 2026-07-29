@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
-func Run() error {
+func Run(ctx context.Context) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
@@ -89,24 +90,18 @@ func Run() error {
 		refresher,
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	if err := refresher.Refresh(ctx); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+
 		return fmt.Errorf("initialize runtime: %w", err)
+	}
+	if ctx.Err() != nil {
+		return nil
 	}
 
 	runtimeScheduler := scheduler.NewTicker()
-
-	schedulerErrors := make(chan error, 1)
-
-	go func() {
-		schedulerErrors <- runtimeScheduler.Run(
-			ctx,
-			cfg.Discovery.Interval,
-			refresher,
-		)
-	}()
 
 	httpRouter := api.NewServer(
 		runtimeManager,
@@ -121,31 +116,18 @@ func Run() error {
 		Str("address", address).
 		Msg("starting HTTP server")
 
-	serverErrors := make(chan error, 1)
-
-	go func() {
-		serverErrors <- http.ListenAndServe(address, httpRouter)
-	}()
-
-	select {
-	case err := <-serverErrors:
-		cancel()
-
-		if err != nil {
-			return fmt.Errorf("serve HTTP: %w", err)
-		}
-
-		return nil
-
-	case err := <-schedulerErrors:
-		cancel()
-
-		if err != nil {
-			return fmt.Errorf("run runtime scheduler: %w", err)
-		}
-
-		return nil
+	server := &http.Server{
+		Addr:    address,
+		Handler: httpRouter,
 	}
+
+	return runLifecycle(ctx, server, func(runtimeCtx context.Context) error {
+		return runtimeScheduler.Run(
+			runtimeCtx,
+			cfg.Discovery.Interval,
+			refresher,
+		)
+	})
 }
 
 func serverAddress(cfg config.ServerConfig) string {

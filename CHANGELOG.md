@@ -7,6 +7,11 @@ API behavior, and deployment details may change between minor releases.
 
 ## Unreleased
 
+### Added
+
+- Add coordinated graceful shutdown for SIGINT and SIGTERM, including the HTTP
+  server and runtime scheduler.
+
 ## 0.1.2
 
 Patch release adding reconciliation readiness, cached status reporting, and
