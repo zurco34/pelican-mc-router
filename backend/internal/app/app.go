@@ -129,6 +129,7 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("create dashboard authorizer: %w", err)
 		}
 		apiServer.WithDashboardAuthorization(authorizer)
+		apiServer.WithDashboardActions(refresher)
 	}
 	httpRouter := apiServer.Router()
 

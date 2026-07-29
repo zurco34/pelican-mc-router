@@ -123,6 +123,10 @@ Only one routing backend is active for a deployment.
   behind authenticated reverse-proxy access control.
   Optional OIDC protection verifies a forwarded bearer token and a required
   role; see [dashboard OIDC authorization](docs/adr/ADR-0006-dashboard-oidc-authorization.md).
+- `POST /api/v1/dashboard/reconcile` is available only with enabled dashboard
+  OIDC protection, the configured operator role, and the same-origin
+  `X-Pelican-MC-Router-CSRF: 1` request header. It runs through the existing
+  serialized reconciliation path and returns safe cached reconciliation status.
 - `GET /metrics` exposes Prometheus text metrics. It includes standard Go and
   process collectors plus these reconciliation metrics:
   - Counter: `pelican_mc_router_reconciliation_total{result}` with fixed result

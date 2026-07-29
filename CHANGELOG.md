@@ -14,7 +14,9 @@ API behavior, and deployment details may change between minor releases.
   authenticated reverse proxy.
 - Optional OIDC JWT verification for `/dashboard`, with configured issuer,
   audience, and read-only role authorization. Invalid identities fail closed;
-  no dashboard write actions are added.
+  identity data is never exposed.
+- An OIDC-operator-authorized manual reconciliation action. It uses the
+  existing serialized refresh path and returns only safe cached status.
 
 ## 0.1.3
 

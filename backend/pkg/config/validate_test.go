@@ -83,11 +83,12 @@ func TestConfigValidateInfrastructureDashboardAuth(t *testing.T) {
 		wantErr error
 	}{
 		{name: "disabled"},
-		{name: "enabled", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}},
-		{name: "missing issuer", auth: DashboardAuthConfig{Enabled: true, Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthIssuerURL},
-		{name: "non HTTPS issuer", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "http://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrInvalidDashboardAuthIssuerURL},
-		{name: "missing audience", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthAudience},
+		{name: "enabled", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", OperatorRole: "operator", DiscoveryTimeout: time.Second}},
+		{name: "missing issuer", auth: DashboardAuthConfig{Enabled: true, Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", OperatorRole: "operator", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthIssuerURL},
+		{name: "non HTTPS issuer", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "http://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", OperatorRole: "operator", DiscoveryTimeout: time.Second}, wantErr: ErrInvalidDashboardAuthIssuerURL},
+		{name: "missing audience", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", RoleClaim: "roles", RequiredRole: "viewer", OperatorRole: "operator", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthAudience},
 		{name: "missing role", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthRequiredRole},
+		{name: "missing operator role", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthOperatorRole},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

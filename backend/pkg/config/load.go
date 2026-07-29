@@ -63,6 +63,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("dashboard_auth.enabled", false)
 	v.SetDefault("dashboard_auth.role_claim", "roles")
 	v.SetDefault("dashboard_auth.required_role", "viewer")
+	v.SetDefault("dashboard_auth.operator_role", "operator")
 	v.SetDefault("dashboard_auth.discovery_timeout", 5*time.Second)
 
 	v.SetDefault("discovery.interval", 30*time.Second)

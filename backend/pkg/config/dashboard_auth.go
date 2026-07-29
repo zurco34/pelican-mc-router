@@ -10,5 +10,6 @@ type DashboardAuthConfig struct {
 	Audience         string        `mapstructure:"audience"`
 	RoleClaim        string        `mapstructure:"role_claim"`
 	RequiredRole     string        `mapstructure:"required_role"`
+	OperatorRole     string        `mapstructure:"operator_role"`
 	DiscoveryTimeout time.Duration `mapstructure:"discovery_timeout"`
 }

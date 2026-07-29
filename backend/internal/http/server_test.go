@@ -55,9 +55,26 @@ type fakeStatusProvider struct {
 	calls     int
 }
 
-type fakeDashboardAuthorizer struct{ err error }
+type fakeDashboardAuthorizer struct {
+	err         error
+	operatorErr error
+}
 
 func (f fakeDashboardAuthorizer) Authorize(context.Context, *http.Request) error {
+	return f.err
+}
+
+func (f fakeDashboardAuthorizer) AuthorizeOperator(context.Context, *http.Request) error {
+	return f.operatorErr
+}
+
+type fakeDashboardRefresher struct {
+	err   error
+	calls int
+}
+
+func (f *fakeDashboardRefresher) Refresh(context.Context) error {
+	f.calls++
 	return f.err
 }
 
@@ -264,6 +281,49 @@ func TestDashboardPageAuthorization(t *testing.T) {
 			}
 			if body := recorder.Body.String(); !strings.Contains(body, test.wantBody) || strings.Contains(body, "dashboard-auth-secret") {
 				t.Fatalf("response = %s, want %q", body, test.wantBody)
+			}
+		})
+	}
+}
+
+func TestDashboardManualReconcile(t *testing.T) {
+	tests := []struct {
+		name       string
+		header     string
+		authorizer fakeDashboardAuthorizer
+		refreshErr error
+		wantStatus int
+		wantCalls  int
+		secret     string
+	}{
+		{name: "success", header: "1", wantStatus: http.StatusOK, wantCalls: 1},
+		{name: "missing CSRF header", wantStatus: http.StatusForbidden},
+		{name: "operator denied", header: "1", authorizer: fakeDashboardAuthorizer{operatorErr: dashboardauth.ErrForbidden}, wantStatus: http.StatusForbidden},
+		{name: "canceled", header: "1", refreshErr: context.Canceled, wantStatus: http.StatusRequestTimeout, wantCalls: 1},
+		{name: "failure hides details", header: "1", refreshErr: errors.New("manual-refresh-secret"), wantStatus: http.StatusServiceUnavailable, wantCalls: 1, secret: "manual-refresh-secret"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			refresher := &fakeDashboardRefresher{err: test.refreshErr}
+			server := NewServer(
+				runtime.New(),
+				&fakeSetupService{},
+				runtime.NewReconciliationTracker(),
+				http.NotFoundHandler(),
+			).WithDashboardAuthorization(test.authorizer).WithDashboardActions(refresher)
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil)
+			request.Header.Set(dashboardCSRFHeader, test.header)
+			recorder := httptest.NewRecorder()
+
+			server.Router().ServeHTTP(recorder, request)
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			if refresher.calls != test.wantCalls {
+				t.Fatalf("refresh calls = %d, want %d", refresher.calls, test.wantCalls)
+			}
+			if test.secret != "" && strings.Contains(recorder.Body.String(), test.secret) {
+				t.Fatalf("response exposed refresh error: %s", recorder.Body.String())
 			}
 		})
 	}

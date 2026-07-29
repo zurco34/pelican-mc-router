@@ -25,16 +25,21 @@ operator actions or produce consistent denial behavior.
   the provider's published keys, and requires the configured audience.
 - A token must contain a non-empty subject and an array-valued configured role
   claim. Access to `/dashboard` requires the configured `viewer` role by
-  default. The subject and token are never logged, returned, or placed in
-  metrics.
+  default; the configured `operator` role inherits read access. The subject and
+  token are never logged, returned, or placed in metrics.
 - Missing, malformed, expired, or unverifiable tokens return a generic `401`.
   Verified identities without the required role return a generic `403`.
+- The only authorized dashboard mutation is a manual reconciliation request.
+  It requires the `operator` role and the same-origin
+  `X-Pelican-MC-Router-CSRF: 1` request header, uses the existing serialized
+  refresh path with the request context, and records only generic action
+  lifecycle events without an identity or token.
 - `/health`, `/ready`, `/metrics`, and the existing versioned API remain outside
   this middleware. The deployment's private binding or authenticated proxy
   boundary remains required.
-- `viewer` is read-only. A future `operator` role may authorize narrowly scoped
-  mutations only after a separate design defines CSRF protection, request
-  serialization, audit events, and cancellation behavior.
+- `viewer` is read-only. The configured `operator` role may authorize narrowly
+  scoped mutations only after a separate design defines CSRF protection,
+  request serialization, audit events, and cancellation behavior.
 
 ## Consequences
 
@@ -43,5 +48,5 @@ OIDC is explicitly enabled. Enabling it requires an SSO or reverse proxy able
 to forward a verified token, an HTTPS issuer URL, the expected audience, and a
 role claim. If provider discovery fails at startup, the process fails closed.
 
-This change intentionally does not add dashboard actions, cookies, sessions,
-CSRF exemptions, or user/audit persistence.
+This change intentionally does not add cookies, sessions, CSRF exemptions, or
+user/audit persistence beyond the bounded generic action lifecycle events.

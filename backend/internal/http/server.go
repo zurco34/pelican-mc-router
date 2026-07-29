@@ -34,6 +34,11 @@ type DashboardService interface {
 
 type DashboardAuthorizer interface {
 	Authorize(context.Context, *http.Request) error
+	AuthorizeOperator(context.Context, *http.Request) error
+}
+
+type DashboardRefresher interface {
+	Refresh(context.Context) error
 }
 
 type setupRequest struct {
@@ -50,6 +55,7 @@ type Server struct {
 	build                buildinfo.Info
 	dashboard            DashboardService
 	dashboardAuth        DashboardAuthorizer
+	dashboardRefresh     DashboardRefresher
 }
 
 func NewServer(
@@ -81,6 +87,7 @@ func (s *Server) Router() http.Handler {
 	router.Get("/ready", s.ready)
 	router.Get("/api/v1/status", s.status)
 	router.Get("/dashboard", s.dashboardPage)
+	router.Post("/api/v1/dashboard/reconcile", s.reconcileDashboard)
 	router.Get("/api/v1/servers", s.listServers)
 	router.Get("/api/v1/routes", s.listRoutes)
 	router.Get("/api/v1/setup", s.getSetupStatus)
@@ -97,6 +104,11 @@ func (s *Server) WithDashboard(service DashboardService) *Server {
 
 func (s *Server) WithDashboardAuthorization(authorizer DashboardAuthorizer) *Server {
 	s.dashboardAuth = authorizer
+	return s
+}
+
+func (s *Server) WithDashboardActions(refresher DashboardRefresher) *Server {
+	s.dashboardRefresh = refresher
 	return s
 }
 

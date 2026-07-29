@@ -286,6 +286,39 @@ func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
 	}
 }
 
+func TestRefreshTaskCancelsWhileWaitingForAnotherRefresh(t *testing.T) {
+	store := &blockingSettingsStore{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}, 1),
+	}
+	task := NewRefreshTask(store, 5*time.Second, "", New(), nil, NewReconciliationTracker(), nil)
+	firstResult := make(chan error, 1)
+	go func() { firstResult <- task.Refresh(context.Background()) }()
+	select {
+	case <-store.entered:
+	case <-time.After(time.Second):
+		t.Fatal("first refresh did not enter the settings store")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	secondResult := make(chan error, 1)
+	go func() { secondResult <- task.Refresh(ctx) }()
+	cancel()
+	select {
+	case err := <-secondResult:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("second Refresh() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled refresh did not return")
+	}
+
+	store.release <- struct{}{}
+	if err := <-firstResult; err != nil {
+		t.Fatalf("first Refresh() error = %v", err)
+	}
+}
+
 func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 	store := &fakeSettingsStore{
 		setupComplete: false,

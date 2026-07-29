@@ -26,6 +26,7 @@ var (
 	ErrMissingDashboardAuthAudience         = errors.New("dashboard auth audience is required when enabled")
 	ErrMissingDashboardAuthRoleClaim        = errors.New("dashboard auth role claim is required when enabled")
 	ErrMissingDashboardAuthRequiredRole     = errors.New("dashboard auth required role is required when enabled")
+	ErrMissingDashboardAuthOperatorRole     = errors.New("dashboard auth operator role is required when enabled")
 	ErrInvalidDashboardAuthDiscoveryTimeout = errors.New("dashboard auth discovery timeout must be greater than zero")
 	ErrMissingPelicanURL                    = errors.New("pelican URL is required")
 	ErrInvalidPelicanURL                    = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
@@ -119,6 +120,9 @@ func validateDashboardAuth(cfg DashboardAuthConfig) error {
 	}
 	if strings.TrimSpace(cfg.RequiredRole) == "" {
 		validationErrors = append(validationErrors, ErrMissingDashboardAuthRequiredRole)
+	}
+	if strings.TrimSpace(cfg.OperatorRole) == "" {
+		validationErrors = append(validationErrors, ErrMissingDashboardAuthOperatorRole)
 	}
 	if cfg.DiscoveryTimeout <= 0 {
 		validationErrors = append(validationErrors, ErrInvalidDashboardAuthDiscoveryTimeout)

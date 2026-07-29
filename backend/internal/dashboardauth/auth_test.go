@@ -64,7 +64,7 @@ func TestAuthorizerAuthorize(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			verifier := test.verifier
-			authorizer := &oidcAuthorizer{verifier: &verifier, requiredRole: "viewer"}
+			authorizer := &oidcAuthorizer{verifier: &verifier, requiredRole: "viewer", operatorRole: "operator"}
 			request := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 			request.Header.Set("Authorization", test.header)
 
@@ -76,6 +76,20 @@ func TestAuthorizerAuthorize(t *testing.T) {
 				t.Fatalf("verified token = %q, want signed-token", verifier.token)
 			}
 		})
+	}
+}
+
+func TestAuthorizerAuthorizeOperator(t *testing.T) {
+	verifier := &fakeVerifier{identity: identity{subject: "operator", roles: []string{"operator"}}}
+	authorizer := &oidcAuthorizer{verifier: verifier, requiredRole: "viewer", operatorRole: "operator"}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil)
+	request.Header.Set("Authorization", "Bearer signed-token")
+
+	if err := authorizer.Authorize(context.Background(), request); err != nil {
+		t.Fatalf("Authorize() error = %v", err)
+	}
+	if err := authorizer.AuthorizeOperator(context.Background(), request); err != nil {
+		t.Fatalf("AuthorizeOperator() error = %v", err)
 	}
 }
 
