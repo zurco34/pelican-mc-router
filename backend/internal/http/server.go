@@ -7,12 +7,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
+	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/secretfile"
@@ -48,6 +50,13 @@ type BootstrapAuthorizer interface {
 	Authorize(*http.Request) error
 }
 
+type RoutePolicyStore interface {
+	List(context.Context) ([]routepolicy.Policy, error)
+	Create(context.Context, routepolicy.Policy) (routepolicy.Policy, error)
+	Update(context.Context, routepolicy.Policy, int64) (routepolicy.Policy, error)
+	Delete(context.Context, string, int64) error
+}
+
 type setupRequest struct {
 	PelicanURL        string `json:"pelican_url"`
 	PelicanSecretName string `json:"pelican_secret_name"`
@@ -67,6 +76,7 @@ type Server struct {
 	managementAuth       DashboardAuthorizer
 	managementAuthSet    bool
 	actionLimiter        *actioncontrol.Limiter
+	routePolicies        RoutePolicyStore
 }
 
 func (s *Server) WithActionLimiter(limiter *actioncontrol.Limiter) *Server {
@@ -115,11 +125,137 @@ func (s *Server) Router() http.Handler {
 	router.Get("/api/v1/servers", s.managementViewer(s.listServers))
 	router.Get("/api/v1/routes", s.managementViewer(s.listRoutes))
 	router.Get("/api/v1/routes/preview", s.managementViewer(s.previewRoutes))
+	router.Get("/api/v1/route-policies", s.managementViewer(s.listRoutePolicies))
+	router.Post("/api/v1/route-policies", s.managementOperator(s.createRoutePolicy))
+	router.Put("/api/v1/route-policies/{serverUUID}", s.managementOperator(s.updateRoutePolicy))
+	router.Delete("/api/v1/route-policies/{serverUUID}", s.managementOperator(s.deleteRoutePolicy))
 	router.Get("/api/v1/setup", s.bootstrapOnly(s.getSetupStatus))
 	router.Post("/api/v1/setup", s.bootstrapOnly(s.configureSetup))
 	router.Put("/api/v1/settings", s.managementOperator(s.updateSettings))
 
 	return router
+}
+
+func (s *Server) WithRoutePolicies(store RoutePolicyStore) *Server { s.routePolicies = store; return s }
+
+type routePolicyRequest struct {
+	ServerUUID      string   `json:"server_uuid"`
+	PrimaryHostname string   `json:"primary_hostname"`
+	Aliases         []string `json:"aliases"`
+	Excluded        bool     `json:"excluded"`
+	Revision        int64    `json:"revision"`
+}
+
+func (s *Server) listRoutePolicies(w http.ResponseWriter, r *http.Request) {
+	if s.routePolicies == nil {
+		http.NotFound(w, r)
+		return
+	}
+	policies, err := s.routePolicies.List(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "route policies unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"policies": policies})
+}
+
+func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
+	if s.routePolicies == nil {
+		http.NotFound(w, r)
+		return
+	}
+	var request routePolicyRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	policy, err := s.routePolicies.Create(r.Context(), routepolicy.Policy{ServerUUID: request.ServerUUID, PrimaryHostname: request.PrimaryHostname, Aliases: request.Aliases, Excluded: request.Excluded})
+	if errors.Is(err, routepolicy.ErrInvalid) {
+		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
+		return
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
+		return
+	}
+	writeJSON(w, http.StatusCreated, policy)
+}
+
+func (s *Server) updateRoutePolicy(w http.ResponseWriter, r *http.Request) {
+	if s.routePolicies == nil {
+		http.NotFound(w, r)
+		return
+	}
+	var request routePolicyRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	policy, err := s.routePolicies.Update(r.Context(), routepolicy.Policy{ServerUUID: chi.URLParam(r, "serverUUID"), PrimaryHostname: request.PrimaryHostname, Aliases: request.Aliases, Excluded: request.Excluded}, request.Revision)
+	s.writeRoutePolicyResult(w, policy, err)
+}
+
+func (s *Server) deleteRoutePolicy(w http.ResponseWriter, r *http.Request) {
+	if s.routePolicies == nil {
+		http.NotFound(w, r)
+		return
+	}
+	revision, err := strconv.ParseInt(r.URL.Query().Get("revision"), 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid route policy revision")
+		return
+	}
+	err = s.routePolicies.Delete(r.Context(), chi.URLParam(r, "serverUUID"), revision)
+	if errors.Is(err, routepolicy.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if errors.Is(err, routepolicy.ErrConflict) {
+		writeJSONError(w, http.StatusConflict, "route policy conflict")
+		return
+	}
+	if errors.Is(err, routepolicy.ErrInvalid) {
+		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
+		return
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) writeRoutePolicyResult(w http.ResponseWriter, policy routepolicy.Policy, err error) {
+	if errors.Is(err, routepolicy.ErrNotFound) {
+		writeJSONError(w, http.StatusNotFound, "route policy not found")
+		return
+	}
+	if errors.Is(err, routepolicy.ErrConflict) {
+		writeJSONError(w, http.StatusConflict, "route policy conflict")
+		return
+	}
+	if errors.Is(err, routepolicy.ErrInvalid) {
+		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
+		return
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, policy)
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return false
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return false
+	}
+	return true
 }
 
 func (s *Server) WithBootstrapAuthorization(authorizer BootstrapAuthorizer) *Server {
