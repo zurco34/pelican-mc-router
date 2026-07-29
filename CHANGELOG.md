@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0 - 2026-07-29
+
+### Added
+
+- Stable `/api/v1` OpenAPI source contract and compatibility/deprecation policy.
+- Supported deployment topology, database, security, recovery, and lifecycle
+  support policies.
+- Documented threat model and release verification evidence.
+
+### Changed
+
+- The project now declares its v1 stable operational and API contract.
+
 ## 0.6.0 - 2026-07-29
 
 ### Added
