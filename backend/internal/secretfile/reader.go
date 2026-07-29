@@ -39,7 +39,7 @@ func New(directory string) (*Reader, error) {
 // Read returns a mounted secret. Names never contain paths, and symlinks,
 // non-regular files, group-readable files, and world-readable files are refused.
 func (r *Reader) Read(name string) ([]byte, error) {
-	if r == nil || !validName.MatchString(name) {
+	if r == nil || !ValidName(name) {
 		return nil, ErrInvalidName
 	}
 
@@ -79,6 +79,10 @@ func (r *Reader) Read(name string) ([]byte, error) {
 	}
 
 	return value, nil
+}
+
+func ValidName(name string) bool {
+	return validName.MatchString(name)
 }
 
 func isSafeFile(info os.FileInfo) bool {

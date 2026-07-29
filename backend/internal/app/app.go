@@ -47,6 +47,10 @@ func Run(ctx context.Context) error {
 	defer db.Close()
 
 	settingsStore := settings.NewStore(db)
+	secretReader, err := secretfile.New(cfg.Secrets.Directory)
+	if err != nil {
+		return fmt.Errorf("create secret reader: %w", err)
+	}
 
 	validator := setup.NewPelicanValidator(
 		setup.PelicanClientFactoryFunc(
@@ -92,12 +96,13 @@ func Run(ctx context.Context) error {
 		reconciliationTracker,
 		reconciliationMetrics,
 		toRetryConfig(cfg.Retry),
-	)
+	).WithSecretResolver(runtime.SecretResolverFunc(secretReader.Read))
 
 	setupService := setup.NewService(
 		settingsStore,
 		validator,
 		refresher,
+		runtime.SecretResolverFunc(secretReader.Read),
 	)
 
 	if err := refresher.Refresh(ctx); err != nil {
@@ -129,11 +134,7 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("determine setup status: %w", err)
 	}
 	if !setupComplete {
-		reader, err := secretfile.New(cfg.Secrets.Directory)
-		if err != nil {
-			return fmt.Errorf("create bootstrap secret reader: %w", err)
-		}
-		authorizer, err := bootstrap.New(reader, cfg.Secrets.BootstrapTokenName)
+		authorizer, err := bootstrap.New(secretReader, cfg.Secrets.BootstrapTokenName)
 		if err != nil {
 			return fmt.Errorf("create bootstrap authorizer: %w", err)
 		}

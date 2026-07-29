@@ -14,6 +14,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
+	"github.com/zurco34/pelican-mc-router/internal/secretfile"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
 	"github.com/zurco34/pelican-mc-router/pkg/buildinfo"
@@ -47,9 +48,9 @@ type BootstrapAuthorizer interface {
 }
 
 type setupRequest struct {
-	PelicanURL    string `json:"pelican_url"`
-	PelicanAPIKey string `json:"pelican_api_key"`
-	RouterDomain  string `json:"router_domain"`
+	PelicanURL        string `json:"pelican_url"`
+	PelicanSecretName string `json:"pelican_secret_name"`
+	RouterDomain      string `json:"router_domain"`
 }
 
 type Server struct {
@@ -463,11 +464,15 @@ func (s *Server) configureSetup(
 
 		return
 	}
+	if !secretfile.ValidName(strings.TrimSpace(request.PelicanSecretName)) {
+		writeJSONError(w, http.StatusBadRequest, "invalid Pelican credential reference")
+		return
+	}
 
 	setupSettings := settings.Settings{
-		PelicanURL:    strings.TrimSpace(request.PelicanURL),
-		PelicanAPIKey: strings.TrimSpace(request.PelicanAPIKey),
-		RouterDomain:  strings.TrimSpace(request.RouterDomain),
+		PelicanURL:        strings.TrimSpace(request.PelicanURL),
+		PelicanSecretName: strings.TrimSpace(request.PelicanSecretName),
+		RouterDomain:      strings.TrimSpace(request.RouterDomain),
 	}
 
 	if err := s.setup.Setup(r.Context(), setupSettings); err != nil {
@@ -524,11 +529,15 @@ func (s *Server) updateSettings(
 
 		return
 	}
+	if !secretfile.ValidName(strings.TrimSpace(request.PelicanSecretName)) {
+		writeJSONError(w, http.StatusBadRequest, "invalid Pelican credential reference")
+		return
+	}
 
 	updatedSettings := settings.Settings{
-		PelicanURL:    strings.TrimSpace(request.PelicanURL),
-		PelicanAPIKey: strings.TrimSpace(request.PelicanAPIKey),
-		RouterDomain:  strings.TrimSpace(request.RouterDomain),
+		PelicanURL:        strings.TrimSpace(request.PelicanURL),
+		PelicanSecretName: strings.TrimSpace(request.PelicanSecretName),
+		RouterDomain:      strings.TrimSpace(request.RouterDomain),
 	}
 
 	if err := s.setup.Update(r.Context(), updatedSettings); err != nil {

@@ -18,6 +18,14 @@ type SettingsStore interface {
 	Load() (settings.Settings, error)
 }
 
+type SecretResolver interface {
+	Resolve(string) ([]byte, error)
+}
+
+type SecretResolverFunc func(string) ([]byte, error)
+
+func (f SecretResolverFunc) Resolve(name string) ([]byte, error) { return f(name) }
+
 type RouteSynchronizer interface {
 	Sync(context.Context, router.RouteSource) error
 }
@@ -41,6 +49,12 @@ type RefreshTask struct {
 	synchronizer        RouteSynchronizer
 	tracker             *ReconciliationTracker
 	observer            ReconciliationObserver
+	secretResolver      SecretResolver
+}
+
+func (r *RefreshTask) WithSecretResolver(resolver SecretResolver) *RefreshTask {
+	r.secretResolver = resolver
+	return r
 }
 
 func NewRefreshTask(
@@ -187,6 +201,17 @@ func (r *RefreshTask) buildRuntimeServices() (
 			"load runtime settings: %w",
 			err,
 		)
+	}
+	if runtimeSettings.PelicanSecretName != "" {
+		if r.secretResolver == nil {
+			return nil, nil, fmt.Errorf("resolve Pelican credential: secret resolver is unavailable")
+		}
+		secret, err := r.secretResolver.Resolve(runtimeSettings.PelicanSecretName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve Pelican credential: %w", err)
+		}
+		runtimeSettings.PelicanAPIKey = string(secret)
+		clear(secret)
 	}
 
 	pelicanClient, err := pelican.NewClient(pelican.Config{
