@@ -42,6 +42,16 @@ type recordingRouteSynchronizer struct {
 	err              error
 }
 
+type recordingReconciliationObserver struct {
+	statuses []ReconciliationStatus
+}
+
+func (o *recordingReconciliationObserver) ObserveReconciliation(
+	status ReconciliationStatus,
+) {
+	o.statuses = append(o.statuses, status)
+}
+
 func (f *recordingRouteSynchronizer) Sync(
 	_ context.Context,
 	source routing.RouteSource,
@@ -88,6 +98,7 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 		manager,
 		synchronizer,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -154,6 +165,7 @@ func TestRefreshTaskPreservesRuntimeWhenRouteSynchronizationFails(
 		manager,
 		synchronizer,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -206,6 +218,7 @@ func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
 		New(),
 		nil,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	results := make(chan error, 2)
@@ -291,6 +304,7 @@ func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 		manager,
 		nil,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -324,6 +338,7 @@ func TestRefreshTaskReturnsSetupStatusError(t *testing.T) {
 		New(),
 		nil,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -366,6 +381,7 @@ func TestRefreshTaskReturnsLoadError(t *testing.T) {
 		manager,
 		nil,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	err := task.Refresh(context.Background())
@@ -415,6 +431,7 @@ func TestRefreshTaskRunDelegatesToRefresh(t *testing.T) {
 		manager,
 		nil,
 		NewReconciliationTracker(),
+		nil,
 	)
 
 	err := task.Run(context.Background())
@@ -428,5 +445,84 @@ func TestRefreshTaskRunDelegatesToRefresh(t *testing.T) {
 
 	if manager.Routing() != nil {
 		t.Fatal("runtime routing service is not nil")
+	}
+}
+
+func TestRefreshTaskObservesTrackerTransitions(t *testing.T) {
+	tests := []struct {
+		name    string
+		store   *fakeSettingsStore
+		syncErr error
+		outcome ReconciliationOutcome
+	}{
+		{
+			name:    "not configured",
+			store:   &fakeSettingsStore{},
+			outcome: ReconciliationOutcomeNotConfigured,
+		},
+		{
+			name: "success",
+			store: &fakeSettingsStore{
+				setupComplete: true,
+				settings: settings.Settings{
+					PelicanURL:    "https://panel.example.com",
+					PelicanAPIKey: "test-key",
+					RouterDomain:  "mc.example.com",
+				},
+			},
+			outcome: ReconciliationOutcomeSuccess,
+		},
+		{
+			name: "runtime build failure",
+			store: &fakeSettingsStore{
+				setupErr: errors.New("settings unavailable"),
+			},
+			outcome: ReconciliationOutcomeFailure,
+		},
+		{
+			name: "route synchronization failure",
+			store: &fakeSettingsStore{
+				setupComplete: true,
+				settings: settings.Settings{
+					PelicanURL:    "https://panel.example.com",
+					PelicanAPIKey: "test-key",
+					RouterDomain:  "mc.example.com",
+				},
+			},
+			syncErr: errors.New("router unavailable"),
+			outcome: ReconciliationOutcomeFailure,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manager := New()
+			observer := &recordingReconciliationObserver{}
+			synchronizer := &recordingRouteSynchronizer{
+				manager: manager,
+				err:     test.syncErr,
+			}
+			task := NewRefreshTask(
+				test.store,
+				5*time.Second,
+				"",
+				manager,
+				synchronizer,
+				NewReconciliationTracker(),
+				observer,
+			)
+
+			_ = task.Refresh(context.Background())
+			if len(observer.statuses) != 2 {
+				t.Fatalf("observations = %d, want 2", len(observer.statuses))
+			}
+			if !observer.statuses[0].InProgress {
+				t.Fatalf("first observation = %+v, want in progress", observer.statuses[0])
+			}
+			completed := observer.statuses[1]
+			if completed.InProgress || completed.LastOutcome == nil || *completed.LastOutcome != test.outcome {
+				t.Fatalf("completed observation = %+v, want %s", completed, test.outcome)
+			}
+		})
 	}
 }
