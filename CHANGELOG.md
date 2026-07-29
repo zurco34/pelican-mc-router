@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 - 2026-07-29
+
+### Added
+
+- Migration checksum verification, including safe backfill for existing
+  databases.
+- Offline SQLite integrity, backup, restore, and compaction utility.
+- Deterministic fake mc-router reconciliation coverage and a disposable release
+  lifecycle verification matrix.
+
+### Changed
+
+- Recovery operations are explicitly offline-only and use distinct,
+  non-overwriting restore targets with documented rollback precautions.
+
 ## 0.5.0 - 2026-07-29
 
 ### Added
