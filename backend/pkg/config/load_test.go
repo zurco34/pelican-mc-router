@@ -67,6 +67,18 @@ func TestLoadDefaults(t *testing.T) {
 			cfg.Discovery.WildcardBackendHost,
 		)
 	}
+	if cfg.DashboardAuth.Enabled {
+		t.Error("DashboardAuth.Enabled = true, want false")
+	}
+	if cfg.DashboardAuth.RoleClaim != "roles" {
+		t.Errorf("DashboardAuth.RoleClaim = %q, want roles", cfg.DashboardAuth.RoleClaim)
+	}
+	if cfg.DashboardAuth.RequiredRole != "viewer" {
+		t.Errorf("DashboardAuth.RequiredRole = %q, want viewer", cfg.DashboardAuth.RequiredRole)
+	}
+	if cfg.DashboardAuth.DiscoveryTimeout != 5*time.Second {
+		t.Errorf("DashboardAuth.DiscoveryTimeout = %v, want 5s", cfg.DashboardAuth.DiscoveryTimeout)
+	}
 
 	if cfg.Database.Path != "./data/pelican-mc-router.db" {
 		t.Errorf(

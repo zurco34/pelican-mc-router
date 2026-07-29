@@ -32,6 +32,10 @@ type DashboardService interface {
 	Snapshot(context.Context) (dashboard.Snapshot, error)
 }
 
+type DashboardAuthorizer interface {
+	Authorize(context.Context, *http.Request) error
+}
+
 type setupRequest struct {
 	PelicanURL    string `json:"pelican_url"`
 	PelicanAPIKey string `json:"pelican_api_key"`
@@ -45,6 +49,7 @@ type Server struct {
 	metrics              http.Handler
 	build                buildinfo.Info
 	dashboard            DashboardService
+	dashboardAuth        DashboardAuthorizer
 }
 
 func NewServer(
@@ -87,6 +92,11 @@ func (s *Server) Router() http.Handler {
 
 func (s *Server) WithDashboard(service DashboardService) *Server {
 	s.dashboard = service
+	return s
+}
+
+func (s *Server) WithDashboardAuthorization(authorizer DashboardAuthorizer) *Server {
+	s.dashboardAuth = authorizer
 	return s
 }
 

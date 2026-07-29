@@ -12,6 +12,9 @@ API behavior, and deployment details may change between minor releases.
 - A same-origin, read-only `/dashboard` page for cached operational status. It
   does not trigger reconciliation and must remain private or protected by an
   authenticated reverse proxy.
+- Optional OIDC JWT verification for `/dashboard`, with configured issuer,
+  audience, and read-only role authorization. Invalid identities fail closed;
+  no dashboard write actions are added.
 
 ## 0.1.3
 
