@@ -15,6 +15,10 @@ API behavior, and deployment details may change between minor releases.
 - Require the mounted bootstrap bearer token for setup while the database is
   uninitialized. Setup routes disappear after successful setup; the token is
   never persisted, returned, logged, or added to metrics.
+- Require OIDC authorization for management routes and add bounded generic
+  throttling for sensitive actions.
+- Add file-backed Pelican credential references. Legacy SQLite credentials stay
+  readable for upgrade compatibility until a successful reference rotation.
 
 ## 0.2.0 - 2026-07-29
 

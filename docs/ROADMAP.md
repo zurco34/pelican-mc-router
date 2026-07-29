@@ -6,12 +6,12 @@ image.
 
 ## v0.3.0: Secure management plane
 
-- [ ] Require verified OIDC roles for management endpoints after bootstrap.
-- [ ] Protect one-time initial setup with a mounted bootstrap-token secret.
-- [ ] Accept file-backed Pelican credential references for new setup and
+- [x] Require verified OIDC roles for management endpoints after bootstrap.
+- [x] Protect one-time initial setup with a mounted bootstrap-token secret.
+- [x] Accept file-backed Pelican credential references for new setup and
   rotation, while allowing a documented legacy upgrade transition.
-- [ ] Add bounded sensitive-action rate limits and generic audit events.
-- [ ] Add `govulncheck` to the backend CI gate.
+- [x] Add bounded sensitive-action rate limits and generic audit events.
+- [x] Add `govulncheck` to the backend CI gate.
 
 See [ADR-0007](adr/ADR-0007-management-plane-security.md) for the approved
 endpoint, trust-boundary, bootstrap, and credential-transition contract.
