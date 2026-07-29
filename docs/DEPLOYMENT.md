@@ -323,10 +323,11 @@ Change `PELICAN_MC_ROUTER_BIND_ADDRESS` only when remote API access is
 required and protected by an authenticated reverse proxy or another trusted
 access-control layer.
 
-The future dashboard follows the same boundary: it is read-only initially and
-must remain private or proxy-authenticated. Direct public dashboard exposure is
-unsupported. See [ADR-0005](adr/ADR-0005-dashboard-security-model.md) for the
-security model and the prerequisites for future write actions.
+The read-only `/dashboard` follows the same boundary and must remain private or
+proxy-authenticated. It displays cached status only and does not trigger
+reconciliation. Direct public dashboard exposure is unsupported. See
+[ADR-0005](adr/ADR-0005-dashboard-security-model.md) for the security model and
+the prerequisites for future write actions.
 
 ## Temporary mc-router route file
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
@@ -27,6 +28,10 @@ type ReconciliationStatusProvider interface {
 	Snapshot() runtime.ReconciliationStatus
 }
 
+type DashboardService interface {
+	Snapshot(context.Context) (dashboard.Snapshot, error)
+}
+
 type setupRequest struct {
 	PelicanURL    string `json:"pelican_url"`
 	PelicanAPIKey string `json:"pelican_api_key"`
@@ -39,6 +44,7 @@ type Server struct {
 	reconciliationStatus ReconciliationStatusProvider
 	metrics              http.Handler
 	build                buildinfo.Info
+	dashboard            DashboardService
 }
 
 func NewServer(
@@ -69,6 +75,7 @@ func (s *Server) Router() http.Handler {
 	router.Get("/metrics", s.metrics.ServeHTTP)
 	router.Get("/ready", s.ready)
 	router.Get("/api/v1/status", s.status)
+	router.Get("/dashboard", s.dashboardPage)
 	router.Get("/api/v1/servers", s.listServers)
 	router.Get("/api/v1/routes", s.listRoutes)
 	router.Get("/api/v1/setup", s.getSetupStatus)
@@ -76,6 +83,11 @@ func (s *Server) Router() http.Handler {
 	router.Put("/api/v1/settings", s.updateSettings)
 
 	return router
+}
+
+func (s *Server) WithDashboard(service DashboardService) *Server {
+	s.dashboard = service
+	return s
 }
 
 type readiness struct {

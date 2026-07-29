@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
@@ -167,6 +168,69 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 	if strings.Contains(body, "secret-value") {
 		t.Fatalf("secret exposed in metrics: %s", body)
+	}
+}
+
+func TestDashboardPageRendersCachedSafeState(t *testing.T) {
+	completed := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	outcome := runtime.ReconciliationOutcomeSuccess
+	secret := "dashboard-secret-bearer-value"
+	server := NewServer(
+		runtime.New(),
+		&fakeSetupService{completed: true},
+		runtime.NewReconciliationTracker(),
+		http.NotFoundHandler(),
+	).WithDashboard(dashboard.NewService(
+		&fakeSetupService{completed: true},
+		&fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{{
+			LastOutcome:     &outcome,
+			LastCompletedAt: &completed,
+			LastError:       &secret,
+		}}},
+		buildinfo.Info{Version: "0.2.0-dev", Revision: "abc123"},
+	))
+
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("content type = %q", got)
+	}
+	body := recorder.Body.String()
+	for _, want := range []string{"Pelican MC Router", "Ready", "0.2.0-dev", "abc123"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard response does not contain %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, secret) {
+		t.Fatalf("dashboard exposed secret: %s", body)
+	}
+}
+
+func TestDashboardPageUnavailableDoesNotExposeSetupError(t *testing.T) {
+	secret := "https://secret.example/dashboard-token"
+	server := NewServer(
+		runtime.New(),
+		&fakeSetupService{},
+		runtime.NewReconciliationTracker(),
+		http.NotFoundHandler(),
+	).WithDashboard(dashboard.NewService(
+		&fakeSetupService{err: errors.New(secret)},
+		runtime.NewReconciliationTracker(),
+		buildinfo.Info{},
+	))
+
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, "dashboard status unavailable") || strings.Contains(body, secret) {
+		t.Fatalf("unexpected error response: %s", body)
 	}
 }
 
