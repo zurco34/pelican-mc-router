@@ -8,5 +8,6 @@ type Config struct {
 	Router    RouterConfig    `mapstructure:"router"`
 	MCRouter  MCRouterConfig  `mapstructure:"mcrouter"`
 	Infrared  InfraredConfig  `mapstructure:"infrared"`
+	Retry     RetryConfig     `mapstructure:"retry"`
 	Logging   LoggingConfig   `mapstructure:"logging"`
 }

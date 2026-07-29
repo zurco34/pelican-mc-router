@@ -22,6 +22,7 @@ func TestConfigValidateInfrastructure(t *testing.T) {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -53,6 +54,7 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -308,6 +310,7 @@ func validConfig() Config {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
 		Router: RouterConfig{
 			Backend: "infrared",
 			Domain:  "mc.example.com",

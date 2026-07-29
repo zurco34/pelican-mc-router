@@ -83,6 +83,11 @@ PELICAN_MC_ROUTER_SERVER_READ_TIMEOUT=15s
 PELICAN_MC_ROUTER_SERVER_WRITE_TIMEOUT=30s
 PELICAN_MC_ROUTER_SERVER_IDLE_TIMEOUT=1m
 
+# Bounded retries for transient Pelican and mc-router read failures.
+PELICAN_MC_ROUTER_RETRY_ATTEMPTS=3
+PELICAN_MC_ROUTER_RETRY_INITIAL_BACKOFF=200ms
+PELICAN_MC_ROUTER_RETRY_MAX_BACKOFF=2s
+
 # Required when Pelican allocations use 0.0.0.0 or ::.
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
@@ -106,6 +111,18 @@ keep-alive connections.
 All timeout values must be positive Go durations. Increase them only when a
 known API client needs longer requests or responses; excessively large values
 can allow slow clients to hold connections and reduce control-plane capacity.
+
+## Control-plane read retries
+
+Pelican MC Router retries only idempotent control-plane reads after transport
+errors and HTTP `429`, `502`, `503`, or `504` responses. The defaults permit
+three total attempts with jittered exponential backoff from 200 milliseconds
+to 2 seconds. Route create and delete operations are never retried, so the
+next scheduled reconciliation remains the safe recovery path for mutations.
+
+Keep retry values bounded: higher values increase the time before a failed
+reconciliation is reported and can delay shutdown until request contexts are
+cancelled.
 
 ## Start the stack
 

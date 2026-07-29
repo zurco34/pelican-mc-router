@@ -13,6 +13,8 @@ API behavior, and deployment details may change between minor releases.
   server and runtime scheduler.
 - Add configurable, bounded HTTP server header, request, response, and idle
   timeouts.
+- Add configurable, bounded retries for transient Pelican and mc-router read
+  failures without retrying route mutations.
 
 ## 0.1.2
 

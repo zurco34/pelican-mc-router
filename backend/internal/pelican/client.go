@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 )
 
 const defaultTimeout = 30 * time.Second
@@ -13,6 +15,7 @@ const defaultTimeout = 30 * time.Second
 type Client struct {
 	cfg        Config
 	httpClient *http.Client
+	retry      retry.Config
 }
 
 // NewClient creates a new Pelican Application API client.
@@ -47,5 +50,6 @@ func NewClient(cfg Config) (*Client, error) {
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
+		retry: cfg.Retry,
 	}, nil
 }

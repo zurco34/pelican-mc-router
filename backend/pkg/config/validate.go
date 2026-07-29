@@ -18,6 +18,9 @@ var (
 	ErrInvalidServerReadTimeout        = errors.New("server read timeout must be greater than zero")
 	ErrInvalidServerWriteTimeout       = errors.New("server write timeout must be greater than zero")
 	ErrInvalidServerIdleTimeout        = errors.New("server idle timeout must be greater than zero")
+	ErrInvalidRetryAttempts            = errors.New("retry attempts must be greater than zero")
+	ErrInvalidRetryInitialBackoff      = errors.New("retry initial backoff must be greater than zero")
+	ErrInvalidRetryMaxBackoff          = errors.New("retry max backoff must be greater than or equal to initial backoff")
 	ErrMissingPelicanURL               = errors.New("pelican URL is required")
 	ErrInvalidPelicanURL               = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
 	ErrMissingPelicanAPIKey            = errors.New("pelican API key is required")
@@ -70,6 +73,15 @@ func (c Config) ValidateInfrastructure() error {
 			validationErrors,
 			ErrInvalidDiscoveryInterval,
 		)
+	}
+	if c.Retry.Attempts <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidRetryAttempts)
+	}
+	if c.Retry.InitialBackoff <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidRetryInitialBackoff)
+	}
+	if c.Retry.MaxBackoff < c.Retry.InitialBackoff {
+		validationErrors = append(validationErrors, ErrInvalidRetryMaxBackoff)
 	}
 
 	return errors.Join(validationErrors...)

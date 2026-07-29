@@ -8,6 +8,7 @@ import (
 
 	"github.com/zurco34/pelican-mc-router/internal/discovery"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 )
@@ -30,6 +31,7 @@ type RefreshTask struct {
 
 	store               SettingsStore
 	timeout             time.Duration
+	retry               retry.Config
 	wildcardBackendHost string
 	manager             *Manager
 	synchronizer        RouteSynchronizer
@@ -45,10 +47,17 @@ func NewRefreshTask(
 	synchronizer RouteSynchronizer,
 	tracker *ReconciliationTracker,
 	observer ReconciliationObserver,
+	retryConfigs ...retry.Config,
 ) *RefreshTask {
+	var retryConfig retry.Config
+	if len(retryConfigs) > 0 {
+		retryConfig = retryConfigs[0]
+	}
+
 	return &RefreshTask{
 		store:               store,
 		timeout:             timeout,
+		retry:               retryConfig,
 		wildcardBackendHost: wildcardBackendHost,
 		manager:             manager,
 		synchronizer:        synchronizer,
@@ -139,6 +148,7 @@ func (r *RefreshTask) buildRuntimeServices() (
 		BaseURL: runtimeSettings.PelicanURL,
 		APIKey:  runtimeSettings.PelicanAPIKey,
 		Timeout: r.timeout,
+		Retry:   r.retry,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf(

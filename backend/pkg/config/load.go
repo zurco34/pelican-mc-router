@@ -56,6 +56,9 @@ func setDefaults(v *viper.Viper) {
 	)
 
 	v.SetDefault("pelican.timeout", 15*time.Second)
+	v.SetDefault("retry.attempts", 3)
+	v.SetDefault("retry.initial_backoff", 200*time.Millisecond)
+	v.SetDefault("retry.max_backoff", 2*time.Second)
 
 	v.SetDefault("discovery.interval", 30*time.Second)
 	v.SetDefault("discovery.wildcard_backend_host", "")

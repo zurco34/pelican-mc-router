@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 )
 
 const defaultPelicanValidationTimeout = 15 * time.Second
@@ -21,19 +22,27 @@ type PelicanNodeLister interface {
 type PelicanValidatorAdapter struct {
 	factory PelicanClientFactory
 	timeout time.Duration
+	retry   retry.Config
 }
 
 func NewPelicanValidator(
 	factory PelicanClientFactory,
 	timeout time.Duration,
+	retryConfigs ...retry.Config,
 ) *PelicanValidatorAdapter {
 	if timeout <= 0 {
 		timeout = defaultPelicanValidationTimeout
 	}
 
+	var retryConfig retry.Config
+	if len(retryConfigs) > 0 {
+		retryConfig = retryConfigs[0]
+	}
+
 	return &PelicanValidatorAdapter{
 		factory: factory,
 		timeout: timeout,
+		retry:   retryConfig,
 	}
 }
 
@@ -46,6 +55,7 @@ func (v *PelicanValidatorAdapter) Validate(
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Timeout: v.timeout,
+		Retry:   v.retry,
 	})
 	if err != nil {
 		return fmt.Errorf("setup: create Pelican client: %w", err)

@@ -14,6 +14,11 @@ pelican:
   api_key: ""
   timeout: 15s
 
+retry:
+  attempts: 3
+  initial_backoff: 200ms
+  max_backoff: 2s
+
 discovery:
   interval: 30s
   wildcard_backend_host: ""

@@ -12,6 +12,7 @@ import (
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/scheduler"
@@ -47,6 +48,7 @@ func Run(ctx context.Context) error {
 			},
 		),
 		cfg.Pelican.Timeout,
+		toRetryConfig(cfg.Retry),
 	)
 
 	runtimeManager := runtime.New()
@@ -82,6 +84,7 @@ func Run(ctx context.Context) error {
 		routeSynchronizer,
 		reconciliationTracker,
 		reconciliationMetrics,
+		toRetryConfig(cfg.Retry),
 	)
 
 	setupService := setup.NewService(
@@ -125,6 +128,14 @@ func Run(ctx context.Context) error {
 			refresher,
 		)
 	})
+}
+
+func toRetryConfig(cfg config.RetryConfig) retry.Config {
+	return retry.Config{
+		Attempts:       cfg.Attempts,
+		InitialBackoff: cfg.InitialBackoff,
+		MaxBackoff:     cfg.MaxBackoff,
+	}
 }
 
 func newHTTPServer(
