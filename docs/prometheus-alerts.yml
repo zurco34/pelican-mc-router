@@ -1,0 +1,11 @@
+groups:
+  - name: pelican-mc-router
+    rules:
+      - alert: PelicanMCRouterReconciliationFailing
+        expr: pelican_mc_router_reconciliation_consecutive_failures > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pelican MC Router reconciliation is failing
+          description: Check /api/v1/status and deployment logs; do not add topology or error text to labels.

@@ -140,6 +140,13 @@ Metrics never use server names, hostnames, URLs, or errors as labels. Metrics
 state is process-local and resets when the service restarts. `/health` remains
 the Docker liveness endpoint and `/ready` remains the readiness endpoint.
 
+Authenticated viewers can read up to 100 recent, safe events from
+`GET /api/v1/operational-history`. Events contain only timestamps, fixed
+kind/outcome values, and bounded route-change counts; they never contain errors,
+credentials, server identities, hostnames, or URLs. Example alert rules are in
+[`docs/prometheus-alerts.yml`](docs/prometheus-alerts.yml); keep labels
+low-cardinality and free of topology or error text.
+
 ## Deployment
 
 The production-oriented Docker Compose stack includes Pelican MC Router,
