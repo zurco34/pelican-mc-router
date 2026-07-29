@@ -73,6 +73,16 @@ type fakeDashboardRefresher struct {
 	calls int
 }
 
+type fakeBootstrapAuthorizer struct {
+	err   error
+	calls int
+}
+
+func (f *fakeBootstrapAuthorizer) Authorize(*http.Request) error {
+	f.calls++
+	return f.err
+}
+
 func (f *fakeDashboardRefresher) Refresh(context.Context) error {
 	f.calls++
 	return f.err
@@ -862,6 +872,37 @@ func TestGetSetupStatus(t *testing.T) {
 
 	if !response.Completed {
 		t.Errorf("completed = false, want true")
+	}
+}
+
+func TestBootstrapOnlySetupRoutes(t *testing.T) {
+	tests := []struct {
+		name       string
+		completed  bool
+		authErr    error
+		wantStatus int
+		wantCalls  int
+	}{
+		{name: "authorized uninitialized", wantStatus: http.StatusOK, wantCalls: 1},
+		{name: "missing or invalid token", authErr: errors.New("bootstrap-token-value"), wantStatus: http.StatusUnauthorized, wantCalls: 1},
+		{name: "completed setup is unavailable", completed: true, wantStatus: http.StatusNotFound},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			authorizer := &fakeBootstrapAuthorizer{err: test.authErr}
+			server := newTestServer(&fakeDiscoveryService{}, &fakeRoutingService{}, &fakeSetupService{completed: test.completed}).WithBootstrapAuthorization(authorizer)
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/setup", nil))
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			if authorizer.calls != test.wantCalls {
+				t.Fatalf("authorization calls = %d, want %d", authorizer.calls, test.wantCalls)
+			}
+			if strings.Contains(recorder.Body.String(), "bootstrap-token-value") {
+				t.Fatal("bootstrap error exposed in response")
+			}
+		})
 	}
 }
 func TestGetSetupStatusReturnsInternalServerError(t *testing.T) {

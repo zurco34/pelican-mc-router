@@ -41,6 +41,10 @@ type DashboardRefresher interface {
 	Refresh(context.Context) error
 }
 
+type BootstrapAuthorizer interface {
+	Authorize(*http.Request) error
+}
+
 type setupRequest struct {
 	PelicanURL    string `json:"pelican_url"`
 	PelicanAPIKey string `json:"pelican_api_key"`
@@ -56,6 +60,7 @@ type Server struct {
 	dashboard            DashboardService
 	dashboardAuth        DashboardAuthorizer
 	dashboardRefresh     DashboardRefresher
+	bootstrapAuth        BootstrapAuthorizer
 }
 
 func NewServer(
@@ -90,11 +95,39 @@ func (s *Server) Router() http.Handler {
 	router.Post("/api/v1/dashboard/reconcile", s.reconcileDashboard)
 	router.Get("/api/v1/servers", s.listServers)
 	router.Get("/api/v1/routes", s.listRoutes)
-	router.Get("/api/v1/setup", s.getSetupStatus)
-	router.Post("/api/v1/setup", s.configureSetup)
+	router.Get("/api/v1/setup", s.bootstrapOnly(s.getSetupStatus))
+	router.Post("/api/v1/setup", s.bootstrapOnly(s.configureSetup))
 	router.Put("/api/v1/settings", s.updateSettings)
 
 	return router
+}
+
+func (s *Server) WithBootstrapAuthorization(authorizer BootstrapAuthorizer) *Server {
+	s.bootstrapAuth = authorizer
+	return s
+}
+
+func (s *Server) bootstrapOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.bootstrapAuth == nil {
+			next(w, r)
+			return
+		}
+		completed, err := s.setup.IsSetupComplete(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "setup status unavailable")
+			return
+		}
+		if completed {
+			http.NotFound(w, r)
+			return
+		}
+		if err := s.bootstrapAuth.Authorize(r); err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "bootstrap authentication required")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Server) WithDashboard(service DashboardService) *Server {

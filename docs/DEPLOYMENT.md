@@ -112,9 +112,16 @@ The application accepts only regular, owner-readable files with bounded names
 from this directory; it refuses paths, symlinks, group-readable files, and
 world-readable files.
 
-This mount is preparatory until the secure management-plane release uses it for
-the one-time bootstrap token and file-backed Pelican credential references. Do
-not put a token or API key in `.env`, logs, or shell history.
+This mount provides the one-time bootstrap token now and will provide
+file-backed Pelican credential references in a later secure-management-plane
+change. Do not put a token or API key in `.env`, logs, or shell history.
+
+For an uninitialized database, create the configured bootstrap-token file in
+this directory before starting the service. Its contents are a random bearer
+token generated and retained by the operator; use it only in the HTTP
+`Authorization` header for `GET` or `POST /api/v1/setup`. Avoid clients, shell
+history, or diagnostics that record request headers. After successful setup,
+these routes return `404` and the bootstrap token cannot be replayed.
 
 Keep `PELICAN_MC_ROUTER_IMAGE` pinned to an exact release version in production.
 This makes upgrades explicit and prevents an unrelated moving tag from changing

@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/rs/zerolog/log"
+	"github.com/zurco34/pelican-mc-router/internal/bootstrap"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/scheduler"
+	"github.com/zurco34/pelican-mc-router/internal/secretfile"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
 	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
@@ -120,6 +122,21 @@ func Run(ctx context.Context) error {
 		reconciliationTracker,
 		buildinfo.Current(),
 	))
+	setupComplete, err := settingsStore.IsSetupComplete()
+	if err != nil {
+		return fmt.Errorf("determine setup status: %w", err)
+	}
+	if !setupComplete {
+		reader, err := secretfile.New(cfg.Secrets.Directory)
+		if err != nil {
+			return fmt.Errorf("create bootstrap secret reader: %w", err)
+		}
+		authorizer, err := bootstrap.New(reader, cfg.Secrets.BootstrapTokenName)
+		if err != nil {
+			return fmt.Errorf("create bootstrap authorizer: %w", err)
+		}
+		apiServer.WithBootstrapAuthorization(authorizer)
+	}
 	if cfg.DashboardAuth.Enabled {
 		authorizer, err := dashboardauth.New(ctx, cfg.DashboardAuth)
 		if err != nil {
