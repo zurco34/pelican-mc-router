@@ -42,5 +42,5 @@ endpoint, trust-boundary, bootstrap, and credential-transition contract.
 ## v1.0.0: Stable contract
 
 - [x] Publish an OpenAPI contract and compatibility/deprecation policy.
-- [ ] Declare supported topology, database guarantees, and security model.
+- [x] Declare supported topology, database guarantees, and security model.
 - [ ] Complete threat-model, performance, and lifecycle evidence.
