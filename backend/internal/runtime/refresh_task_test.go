@@ -46,6 +46,22 @@ type recordingReconciliationObserver struct {
 	statuses []ReconciliationStatus
 }
 
+type recordingReconciliationEventRecorder struct {
+	outcomes []ReconciliationOutcome
+	results  []routing.ReconciliationResult
+	err      error
+}
+
+func (r *recordingReconciliationEventRecorder) RecordReconciliation(
+	_ context.Context,
+	outcome ReconciliationOutcome,
+	result routing.ReconciliationResult,
+) error {
+	r.outcomes = append(r.outcomes, outcome)
+	r.results = append(r.results, result)
+	return r.err
+}
+
 func (o *recordingReconciliationObserver) ObserveReconciliation(
 	status ReconciliationStatus,
 ) {
@@ -132,6 +148,68 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 	status := task.ReconciliationTracker().Snapshot()
 	if status.LastOutcome == nil || *status.LastOutcome != ReconciliationOutcomeSuccess {
 		t.Fatalf("reconciliation status = %+v, want success", status)
+	}
+}
+
+func TestRefreshTaskRecordsCompletedReconciliationOutcomes(t *testing.T) {
+	tests := []struct {
+		name           string
+		store          *fakeSettingsStore
+		synchronizer   *recordingRouteSynchronizer
+		wantOutcome    ReconciliationOutcome
+		wantRefreshErr bool
+	}{
+		{
+			name:        "not configured",
+			store:       &fakeSettingsStore{},
+			wantOutcome: ReconciliationOutcomeNotConfigured,
+		},
+		{
+			name:         "success",
+			store:        &fakeSettingsStore{setupComplete: true, settings: settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"}},
+			synchronizer: &recordingRouteSynchronizer{},
+			wantOutcome:  ReconciliationOutcomeSuccess,
+		},
+		{
+			name:           "failure",
+			store:          &fakeSettingsStore{setupComplete: true, settings: settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"}},
+			synchronizer:   &recordingRouteSynchronizer{err: errors.New("unavailable")},
+			wantOutcome:    ReconciliationOutcomeFailure,
+			wantRefreshErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manager := New()
+			if test.synchronizer != nil {
+				test.synchronizer.manager = manager
+			}
+			recorder := &recordingReconciliationEventRecorder{}
+			task := NewRefreshTask(test.store, 5*time.Second, "", manager, test.synchronizer, NewReconciliationTracker(), nil).
+				WithReconciliationEventRecorder(recorder)
+			err := task.Refresh(context.Background())
+			if (err != nil) != test.wantRefreshErr {
+				t.Fatalf("Refresh() error = %v, want error %t", err, test.wantRefreshErr)
+			}
+			if len(recorder.outcomes) != 1 || recorder.outcomes[0] != test.wantOutcome {
+				t.Fatalf("recorded outcomes = %v, want [%s]", recorder.outcomes, test.wantOutcome)
+			}
+		})
+	}
+}
+
+func TestRefreshTaskHistoryFailureDoesNotChangeReconciliationResult(t *testing.T) {
+	store := &fakeSettingsStore{}
+	recorder := &recordingReconciliationEventRecorder{err: errors.New("history unavailable")}
+	task := NewRefreshTask(store, 5*time.Second, "", New(), nil, NewReconciliationTracker(), nil).
+		WithReconciliationEventRecorder(recorder)
+
+	if err := task.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh() error = %v, want nil", err)
+	}
+	if len(recorder.outcomes) != 1 || recorder.outcomes[0] != ReconciliationOutcomeNotConfigured {
+		t.Fatalf("recorded outcomes = %v, want not configured", recorder.outcomes)
 	}
 }
 
