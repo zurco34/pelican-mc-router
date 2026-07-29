@@ -101,11 +101,20 @@ func (c *Controller) Reconcile(
 	ctx context.Context,
 	routes []router.Route,
 ) error {
+	_, err := c.ReconcileWithResult(ctx, routes)
+	return err
+}
+
+func (c *Controller) ReconcileWithResult(
+	ctx context.Context,
+	routes []router.Route,
+) (router.ReconciliationResult, error) {
+	result := router.ReconciliationResult{Desired: len(routes)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf(
+		return result, fmt.Errorf(
 			"mcrouter: reconcile routes: %w",
 			err,
 		)
@@ -125,7 +134,7 @@ func (c *Controller) Reconcile(
 	// any mc-router API calls.
 	for _, route := range routes {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: reconcile routes: %w",
 				err,
 			)
@@ -136,7 +145,7 @@ func (c *Controller) Reconcile(
 		)
 
 		if hostname == "" {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: validate route for server %q: %w",
 				route.ServerID,
 				ErrEmptyHostname,
@@ -144,7 +153,7 @@ func (c *Controller) Reconcile(
 		}
 
 		if !isValidHostname(hostname) {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: validate route for server %q: "+
 					"hostname %q: %w",
 				route.ServerID,
@@ -156,7 +165,7 @@ func (c *Controller) Reconcile(
 		backendHost := strings.TrimSpace(route.Backend.Host)
 
 		if backendHost == "" {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: validate route for server %q: %w",
 				route.ServerID,
 				ErrEmptyBackendHost,
@@ -165,7 +174,7 @@ func (c *Controller) Reconcile(
 
 		if route.Backend.Port < 1 ||
 			route.Backend.Port > 65535 {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: validate route for server %q: "+
 					"backend port %d: %w",
 				route.ServerID,
@@ -175,7 +184,7 @@ func (c *Controller) Reconcile(
 		}
 
 		if _, exists := desiredBackends[hostname]; exists {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: duplicate route hostname %q: %w",
 				hostname,
 				ErrDuplicateHostname,
@@ -197,7 +206,7 @@ func (c *Controller) Reconcile(
 
 	currentRoutes, err := c.client.ListRoutes(ctx)
 	if err != nil {
-		return fmt.Errorf(
+		return result, fmt.Errorf(
 			"mcrouter: list current routes: %w",
 			err,
 		)
@@ -205,7 +214,7 @@ func (c *Controller) Reconcile(
 
 	for _, hostname := range desiredHostnames {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: reconcile routes: %w",
 				err,
 			)
@@ -213,7 +222,8 @@ func (c *Controller) Reconcile(
 
 		backend := desiredBackends[hostname]
 
-		if currentRoutes[hostname] == backend {
+		currentBackend, exists := currentRoutes[hostname]
+		if exists && currentBackend == backend {
 			continue
 		}
 
@@ -222,12 +232,18 @@ func (c *Controller) Reconcile(
 			hostname,
 			backend,
 		); err != nil {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: create route %q: %w",
 				hostname,
 				err,
 			)
 		}
+		if exists {
+			result.Updated++
+		} else {
+			result.Created++
+		}
+		result.Changed = true
 	}
 
 	staleHostnames := make([]string, 0)
@@ -247,7 +263,7 @@ func (c *Controller) Reconcile(
 
 	for _, hostname := range staleHostnames {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: reconcile routes: %w",
 				err,
 			)
@@ -257,13 +273,15 @@ func (c *Controller) Reconcile(
 			ctx,
 			hostname,
 		); err != nil {
-			return fmt.Errorf(
+			return result, fmt.Errorf(
 				"mcrouter: delete stale route %q: %w",
 				hostname,
 				err,
 			)
 		}
+		result.Deleted++
+		result.Changed = true
 	}
 
-	return nil
+	return result, nil
 }

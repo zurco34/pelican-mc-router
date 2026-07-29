@@ -84,14 +84,23 @@ type readiness struct {
 }
 
 type reconciliationStatusResponse struct {
-	InProgress          bool    `json:"in_progress"`
-	LastOutcome         *string `json:"last_outcome"`
-	LastStartedAt       *string `json:"last_started_at"`
-	LastCompletedAt     *string `json:"last_completed_at"`
-	LastSuccessAt       *string `json:"last_success_at"`
-	LastDurationMS      int64   `json:"last_duration_ms"`
-	ConsecutiveFailures int     `json:"consecutive_failures"`
-	LastError           *string `json:"last_error"`
+	InProgress          bool                 `json:"in_progress"`
+	LastOutcome         *string              `json:"last_outcome"`
+	LastStartedAt       *string              `json:"last_started_at"`
+	LastCompletedAt     *string              `json:"last_completed_at"`
+	LastSuccessAt       *string              `json:"last_success_at"`
+	LastDurationMS      int64                `json:"last_duration_ms"`
+	ConsecutiveFailures int                  `json:"consecutive_failures"`
+	LastError           *string              `json:"last_error"`
+	RouteChanges        routeChangesResponse `json:"route_changes"`
+}
+
+type routeChangesResponse struct {
+	Desired int  `json:"desired"`
+	Created int  `json:"created"`
+	Updated int  `json:"updated"`
+	Deleted int  `json:"deleted"`
+	Changed bool `json:"changed"`
 }
 
 type statusResponse struct {
@@ -180,6 +189,13 @@ func reconciliationResponse(
 		LastDurationMS:      status.LastDurationMS,
 		ConsecutiveFailures: status.ConsecutiveFailures,
 		LastError:           status.LastError,
+		RouteChanges: routeChangesResponse{
+			Desired: status.RouteChanges.Desired,
+			Created: status.RouteChanges.Created,
+			Updated: status.RouteChanges.Updated,
+			Deleted: status.RouteChanges.Deleted,
+			Changed: status.RouteChanges.Changed,
+		},
 	}
 }
 

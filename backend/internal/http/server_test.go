@@ -179,6 +179,13 @@ type testReconciliationResponse struct {
 	LastDurationMS      int64   `json:"last_duration_ms"`
 	ConsecutiveFailures int     `json:"consecutive_failures"`
 	LastError           *string `json:"last_error"`
+	RouteChanges        struct {
+		Desired int  `json:"desired"`
+		Created int  `json:"created"`
+		Updated int  `json:"updated"`
+		Deleted int  `json:"deleted"`
+		Changed bool `json:"changed"`
+	} `json:"route_changes"`
 }
 
 type testStatusResponse struct {

@@ -3,6 +3,8 @@ package runtime
 import (
 	"sync"
 	"time"
+
+	"github.com/zurco34/pelican-mc-router/internal/router"
 )
 
 type ReconciliationOutcome string
@@ -23,6 +25,7 @@ type ReconciliationStatus struct {
 	LastDurationMS      int64
 	ConsecutiveFailures int
 	LastError           *string
+	RouteChanges        router.ReconciliationResult
 }
 
 // ReconciliationTracker records refresh state for HTTP status consumers.
@@ -50,28 +53,29 @@ func (t *ReconciliationTracker) Start() {
 }
 
 func (t *ReconciliationTracker) CompleteNotConfigured() {
-	t.complete(ReconciliationOutcomeNotConfigured, "")
+	t.complete(ReconciliationOutcomeNotConfigured, "", router.ReconciliationResult{})
 }
 
-func (t *ReconciliationTracker) CompleteSuccess() {
-	t.complete(ReconciliationOutcomeSuccess, "")
+func (t *ReconciliationTracker) CompleteSuccess(results ...router.ReconciliationResult) {
+	t.complete(ReconciliationOutcomeSuccess, "", reconciliationResult(results))
 }
 
 func (t *ReconciliationTracker) CompleteRuntimeBuildFailure() {
-	t.completeFailure("runtime build failed")
+	t.completeFailure("runtime build failed", router.ReconciliationResult{})
 }
 
-func (t *ReconciliationTracker) CompleteRouteSynchronizationFailure() {
-	t.completeFailure("route synchronization failed")
+func (t *ReconciliationTracker) CompleteRouteSynchronizationFailure(results ...router.ReconciliationResult) {
+	t.completeFailure("route synchronization failed", reconciliationResult(results))
 }
 
-func (t *ReconciliationTracker) completeFailure(summary string) {
-	t.complete(ReconciliationOutcomeFailure, summary)
+func (t *ReconciliationTracker) completeFailure(summary string, result router.ReconciliationResult) {
+	t.complete(ReconciliationOutcomeFailure, summary, result)
 }
 
 func (t *ReconciliationTracker) complete(
 	outcome ReconciliationOutcome,
 	errorSummary string,
+	result router.ReconciliationResult,
 ) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -80,6 +84,7 @@ func (t *ReconciliationTracker) complete(
 	t.status.InProgress = false
 	t.status.LastOutcome = &outcome
 	t.status.LastCompletedAt = &completed
+	t.status.RouteChanges = result
 	if t.status.LastStartedAt != nil {
 		duration := completed.Sub(*t.status.LastStartedAt).Milliseconds()
 		if duration > 0 {
@@ -102,6 +107,14 @@ func (t *ReconciliationTracker) complete(
 		message := errorSummary
 		t.status.LastError = &message
 	}
+}
+
+func reconciliationResult(results []router.ReconciliationResult) router.ReconciliationResult {
+	if len(results) == 0 {
+		return router.ReconciliationResult{}
+	}
+
+	return results[0]
 }
 
 func (t *ReconciliationTracker) Snapshot() ReconciliationStatus {

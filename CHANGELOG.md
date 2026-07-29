@@ -16,6 +16,8 @@ API behavior, and deployment details may change between minor releases.
 - Add configurable, bounded retries for transient Pelican and mc-router read
   failures without retrying route mutations.
 - Add build version and revision to startup logs and `GET /api/v1/status`.
+- Add bounded reconciliation route diagnostics to status responses and success
+  logs without exposing routing identities or backend details.
 
 ## 0.1.2
 

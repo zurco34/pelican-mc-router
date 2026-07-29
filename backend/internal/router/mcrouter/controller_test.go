@@ -24,6 +24,28 @@ type fakeRouteClient struct {
 	deleted     []string
 }
 
+func TestControllerReconcileWithResultReportsRouteChanges(t *testing.T) {
+	client := &fakeRouteClient{routes: map[string]string{
+		"update.mc.example.com": "10.0.0.1:25565",
+		"delete.mc.example.com": "10.0.0.2:25565",
+	}}
+	controller, err := NewController(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := controller.ReconcileWithResult(context.Background(), []router.Route{
+		{ServerID: "create", Hostname: "create.mc.example.com", Backend: router.Backend{Host: "10.0.0.3", Port: 25565}},
+		{ServerID: "update", Hostname: "update.mc.example.com", Backend: router.Backend{Host: "10.0.0.4", Port: 25565}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := router.ReconciliationResult{Desired: 2, Created: 1, Updated: 1, Deleted: 1, Changed: true}
+	if result != want {
+		t.Fatalf("result = %#v, want %#v", result, want)
+	}
+}
+
 func (c *fakeRouteClient) ListRoutes(
 	context.Context,
 ) (map[string]string, error) {
