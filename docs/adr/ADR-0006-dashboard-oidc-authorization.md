@@ -12,8 +12,8 @@ Accepted
 
 ADR-0005 requires application-level authentication and authorization before
 dashboard write actions can be considered. The dashboard is same-origin and
-read-only today, but relying only on a network boundary cannot authorize future
-operator actions or produce consistent denial behavior.
+has one narrow operator action, but relying only on a network boundary cannot
+authorize that action or produce consistent denial behavior.
 
 ## Decision
 
@@ -36,7 +36,8 @@ operator actions or produce consistent denial behavior.
   lifecycle events without an identity or token.
 - `/health`, `/ready`, `/metrics`, and the existing versioned API remain outside
   this middleware. The deployment's private binding or authenticated proxy
-  boundary remains required.
+  boundary remains required. ADR-0007 supersedes this endpoint-policy exception
+  for the v0.3 management-plane security work.
 - `viewer` is read-only. The configured `operator` role may authorize narrowly
   scoped mutations only after a separate design defines CSRF protection,
   request serialization, audit events, and cancellation behavior.

@@ -1,16 +1,44 @@
-# v0.1
+# Roadmap
 
-- [ ] Configuration
-- [ ] Pelican Client
-- [ ] Route Manager
-- [ ] Infrared Generator
+Released work is documented in the [changelog](../CHANGELOG.md). This roadmap
+describes planned work only; it does not change the behavior of a released
+image.
 
-# v0.2
+## v0.3.0: Secure management plane
 
-- [x] Dashboard
-- [ ] Logs
-- [ ] Aliases
+- [ ] Require verified OIDC roles for management endpoints after bootstrap.
+- [ ] Protect one-time initial setup with a mounted bootstrap-token secret.
+- [ ] Accept file-backed Pelican credential references for new setup and
+  rotation, while allowing a documented legacy upgrade transition.
+- [ ] Add bounded sensitive-action rate limits and generic audit events.
+- [ ] Add `govulncheck` to the backend CI gate.
 
-# v1.0
+See [ADR-0007](adr/ADR-0007-management-plane-security.md) for the approved
+endpoint, trust-boundary, bootstrap, and credential-transition contract.
 
-- [ ] Stable Release
+## v0.4.0: Route policies
+
+- [ ] Persist UUID-keyed route policies.
+- [ ] Validate stable primary names, aliases, exclusions, and collisions before
+  a backend mutation.
+- [ ] Establish managed-route ownership and single-instance policy before
+  expanding backend mutations.
+- [ ] Add authenticated route preview and policy management.
+
+## v0.5.0: Operational history
+
+- [ ] Persist bounded, allowlisted reconciliation and action history.
+- [ ] Expose authenticated recent-event views and dashboard rendering.
+- [ ] Publish safe Prometheus alert examples.
+
+## v0.6.0: Recovery and lifecycle
+
+- [ ] Formalize migration compatibility and integrity validation.
+- [ ] Add offline SQLite backup, restore, and recovery tools.
+- [ ] Add fake-control-plane end-to-end and release lifecycle coverage.
+
+## v1.0.0: Stable contract
+
+- [ ] Publish an OpenAPI contract and compatibility/deprecation policy.
+- [ ] Declare supported topology, database guarantees, and security model.
+- [ ] Complete threat-model, performance, and lifecycle evidence.
