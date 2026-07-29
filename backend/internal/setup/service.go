@@ -18,7 +18,8 @@ var ErrAlreadyConfigured = errors.New(
 type SettingsStore interface {
 	IsSetupComplete() (bool, error)
 	Save(settings.Settings) error
-	SaveSetup(settings.Settings) error
+	StageSetup(settings.Settings) error
+	PromotePendingSetup() error
 }
 
 type PelicanValidator interface {
@@ -31,6 +32,10 @@ type PelicanValidator interface {
 
 type RuntimeRefresher interface {
 	Refresh(context.Context) error
+}
+
+type CandidateRuntimeActivator interface {
+	Prepare(context.Context, settings.Settings) (func(), error)
 }
 
 type SecretResolver interface{ Resolve(string) ([]byte, error) }
@@ -73,50 +78,32 @@ func (s *Service) IsSetupComplete(
 	return complete, nil
 }
 
-func (s *Service) saveAndRefresh(
+func (s *Service) prepareAndPublish(
 	ctx context.Context,
 	input settings.Settings,
 	save func(settings.Settings) error,
 ) error {
-	input.PelicanURL = strings.TrimSpace(input.PelicanURL)
-	input.PelicanAPIKey = strings.TrimSpace(input.PelicanAPIKey)
-	input.PelicanSecretName = strings.TrimSpace(input.PelicanSecretName)
-	input.RouterDomain = strings.TrimSpace(input.RouterDomain)
-
-	if input.RouterDomain == "" {
-		return ErrMissingRouterDomain
+	if err := s.validate(ctx, &input); err != nil {
+		return err
 	}
-
-	key := input.PelicanAPIKey
-	if input.PelicanSecretName != "" {
-		if s.resolver == nil {
-			return errors.New("setup: secret resolver is unavailable")
+	if s.refresher == nil {
+		if err := save(input); err != nil {
+			return fmt.Errorf("save settings: %w", err)
 		}
-		secret, err := s.resolver.Resolve(input.PelicanSecretName)
-		if err != nil {
-			return errors.New("setup: Pelican credential is unavailable")
-		}
-		key = string(secret)
-		clear(secret)
+		return nil
 	}
-	if err := s.validator.Validate(
-		ctx,
-		input.PelicanURL,
-		key,
-	); err != nil {
-		return fmt.Errorf("setup: validate Pelican credentials: %w", err)
+	activator, ok := s.refresher.(CandidateRuntimeActivator)
+	if !ok {
+		return errors.New("setup: candidate runtime activation is unavailable")
 	}
-
+	publish, err := activator.Prepare(ctx, input)
+	if err != nil {
+		return fmt.Errorf("activate candidate runtime: %w", err)
+	}
 	if err := save(input); err != nil {
-		return fmt.Errorf("save setup: %w", err)
+		return fmt.Errorf("save settings: %w", err)
 	}
-
-	if s.refresher != nil {
-		if err := s.refresher.Refresh(ctx); err != nil {
-			return fmt.Errorf("refresh runtime: %w", err)
-		}
-	}
-
+	publish()
 	return nil
 }
 
@@ -136,20 +123,62 @@ func (s *Service) Setup(
 		return ErrAlreadyConfigured
 	}
 
-	return s.saveAndRefresh(
-		ctx,
-		input,
-		s.store.SaveSetup,
-	)
+	if err := s.validate(ctx, &input); err != nil {
+		return err
+	}
+	if err := s.store.StageSetup(input); err != nil {
+		return fmt.Errorf("stage setup: %w", err)
+	}
+	if s.refresher == nil {
+		if err := s.store.PromotePendingSetup(); err != nil {
+			return fmt.Errorf("promote setup: %w", err)
+		}
+		return nil
+	}
+	activator, ok := s.refresher.(CandidateRuntimeActivator)
+	if !ok {
+		return errors.New("setup: candidate runtime activation is unavailable")
+	}
+	publish, err := activator.Prepare(ctx, input)
+	if err != nil {
+		return fmt.Errorf("activate candidate runtime: %w", err)
+	}
+	if err := s.store.PromotePendingSetup(); err != nil {
+		return fmt.Errorf("promote setup: %w", err)
+	}
+	publish()
+	return nil
+}
+
+func (s *Service) validate(ctx context.Context, input *settings.Settings) error {
+	input.PelicanURL = strings.TrimSpace(input.PelicanURL)
+	input.PelicanAPIKey = strings.TrimSpace(input.PelicanAPIKey)
+	input.PelicanSecretName = strings.TrimSpace(input.PelicanSecretName)
+	input.RouterDomain = strings.TrimSpace(input.RouterDomain)
+	if input.RouterDomain == "" {
+		return ErrMissingRouterDomain
+	}
+	key := input.PelicanAPIKey
+	if input.PelicanSecretName != "" {
+		if s.resolver == nil {
+			return errors.New("setup: secret resolver is unavailable")
+		}
+		secret, err := s.resolver.Resolve(input.PelicanSecretName)
+		if err != nil {
+			return errors.New("setup: Pelican credential is unavailable")
+		}
+		key = string(secret)
+		clear(secret)
+	}
+	if err := s.validator.Validate(ctx, input.PelicanURL, key); err != nil {
+		return fmt.Errorf("setup: validate Pelican credentials: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Update(
 	ctx context.Context,
 	input settings.Settings,
 ) error {
-	return s.saveAndRefresh(
-		ctx,
-		input,
-		s.store.Save,
-	)
+	return s.prepareAndPublish(ctx, input, s.store.Save)
 }

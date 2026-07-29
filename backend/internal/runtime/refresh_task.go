@@ -169,6 +169,34 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 	return nil
 }
 
+// Prepare activates candidate settings without publishing them to readers.
+// The returned function publishes the already reconciled candidate.
+func (r *RefreshTask) Prepare(ctx context.Context, value settings.Settings) (func(), error) {
+	if err := r.acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer r.release()
+	discoveryService, routingService, err := r.buildRuntimeServicesFor(value)
+	if err != nil {
+		return nil, fmt.Errorf("build candidate runtime services: %w", err)
+	}
+	if _, productionSynchronizer := r.synchronizer.(*router.Synchronizer); productionSynchronizer {
+		inventory, ok := discoveryService.(*Inventory)
+		if !ok {
+			return nil, fmt.Errorf("prepare inventory: inventory service is unavailable")
+		}
+		if err := inventory.Refresh(ctx); err != nil {
+			return nil, fmt.Errorf("prepare inventory: %w", err)
+		}
+	}
+	if r.synchronizer != nil {
+		if _, err := synchronizeRoutes(ctx, r.synchronizer, routingService); err != nil {
+			return nil, fmt.Errorf("synchronize candidate routes: %w", err)
+		}
+	}
+	return func() { r.manager.Set(discoveryService, routingService) }, nil
+}
+
 func (r *RefreshTask) acquire(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -250,6 +278,10 @@ func (r *RefreshTask) buildRuntimeServices() (
 			err,
 		)
 	}
+	return r.buildRuntimeServicesFor(runtimeSettings)
+}
+
+func (r *RefreshTask) buildRuntimeServicesFor(runtimeSettings settings.Settings) (DiscoveryService, RoutingService, error) {
 	if runtimeSettings.PelicanSecretName != "" {
 		if r.secretResolver == nil {
 			return nil, nil, fmt.Errorf("resolve Pelican credential: secret resolver is unavailable")

@@ -441,3 +441,123 @@ func TestStoreSaveSetup(t *testing.T) {
 		t.Fatal("IsSetupComplete() = false, want true")
 	}
 }
+
+func TestStorePromotePendingSetup(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store := NewStore(db)
+
+	pending := Settings{
+		PelicanURL:        "https://panel.example.com/api/application",
+		PelicanSecretName: "pelican_api_key",
+		RouterDomain:      "mc.example.com",
+	}
+	if err := store.StageSetup(pending); err != nil {
+		t.Fatalf("StageSetup() error = %v", err)
+	}
+	complete, err := store.IsSetupComplete()
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+	if complete {
+		t.Fatal("staged setup was marked complete")
+	}
+	if _, err := store.Load(); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Load() error = %v, want ErrNotFound before promotion", err)
+	}
+
+	if err := store.PromotePendingSetup(); err != nil {
+		t.Fatalf("PromotePendingSetup() error = %v", err)
+	}
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got != pending {
+		t.Fatalf("Load() = %#v, want %#v", got, pending)
+	}
+	complete, err = store.IsSetupComplete()
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+	if !complete {
+		t.Fatal("promoted setup was not marked complete")
+	}
+	var pendingRows int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pending_setup`).Scan(&pendingRows); err != nil {
+		t.Fatalf("count pending setup rows: %v", err)
+	}
+	if pendingRows != 0 {
+		t.Fatalf("pending setup rows = %d, want 0", pendingRows)
+	}
+}
+
+func TestStoreStageSetupRejectsLegacyCredential(t *testing.T) {
+	t.Parallel()
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	err = NewStore(db).StageSetup(Settings{
+		PelicanURL:    "https://panel.example.com",
+		PelicanAPIKey: "test-api-key",
+		RouterDomain:  "mc.example.com",
+	})
+	if err == nil {
+		t.Fatal("StageSetup() error = nil, want an error")
+	}
+	var rows int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pending_setup`).Scan(&rows); err != nil {
+		t.Fatalf("count pending setup rows: %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("pending setup rows = %d, want 0", rows)
+	}
+}
+
+func TestStorePromotionFailureKeepsPendingSetupRetryable(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store := NewStore(db)
+	pending := Settings{PelicanURL: "https://panel.example.com", PelicanSecretName: "pelican_api_key", RouterDomain: "mc.example.com"}
+	if err := store.StageSetup(pending); err != nil {
+		t.Fatalf("StageSetup() error = %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_setup_promotion
+		BEFORE INSERT ON settings
+		WHEN NEW.key = 'setup.completed'
+		BEGIN SELECT RAISE(ABORT, 'forced promotion failure'); END
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+	if err := store.PromotePendingSetup(); err == nil {
+		t.Fatal("PromotePendingSetup() error = nil, want an error")
+	}
+	complete, err := store.IsSetupComplete()
+	if err != nil {
+		t.Fatalf("IsSetupComplete() error = %v", err)
+	}
+	if complete {
+		t.Fatal("failed promotion marked setup complete")
+	}
+	var secretName string
+	if err := db.QueryRow(`SELECT pelican_secret_name FROM pending_setup WHERE id = 1`).Scan(&secretName); err != nil {
+		t.Fatalf("load pending setup: %v", err)
+	}
+	if secretName != pending.PelicanSecretName {
+		t.Fatal("failed promotion did not retain pending setup")
+	}
+}

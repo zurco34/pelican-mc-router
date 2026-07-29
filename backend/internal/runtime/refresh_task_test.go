@@ -151,6 +151,43 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 	}
 }
 
+func TestRefreshTaskPreparePublishesOnlyAfterPromotion(t *testing.T) {
+	manager := New()
+	synchronizer := &recordingRouteSynchronizer{manager: manager}
+	task := NewRefreshTask(
+		&fakeSettingsStore{},
+		5*time.Second,
+		"",
+		manager,
+		synchronizer,
+		NewReconciliationTracker(),
+		nil,
+	)
+
+	publish, err := task.Prepare(context.Background(), settings.Settings{
+		PelicanURL:    "https://panel.example.com",
+		PelicanAPIKey: "test-key",
+		RouterDomain:  "mc.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if synchronizer.calls != 1 {
+		t.Fatalf("Sync() calls = %d, want 1", synchronizer.calls)
+	}
+	if synchronizer.runtimePublished {
+		t.Fatal("candidate runtime was published before preparation completed")
+	}
+	if manager.Routing() != nil {
+		t.Fatal("candidate runtime was published before promotion")
+	}
+
+	publish()
+	if manager.Routing() == nil {
+		t.Fatal("candidate runtime was not published after promotion")
+	}
+}
+
 func TestRefreshTaskRecordsCompletedReconciliationOutcomes(t *testing.T) {
 	tests := []struct {
 		name           string
