@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
@@ -21,6 +22,10 @@ type SetupService interface {
 	Update(context.Context, settings.Settings) error
 }
 
+type ReconciliationStatusProvider interface {
+	Snapshot() runtime.ReconciliationStatus
+}
+
 type setupRequest struct {
 	PelicanURL    string `json:"pelican_url"`
 	PelicanAPIKey string `json:"pelican_api_key"`
@@ -28,17 +33,20 @@ type setupRequest struct {
 }
 
 type Server struct {
-	runtime *runtime.Manager
-	setup   SetupService
+	runtime              *runtime.Manager
+	setup                SetupService
+	reconciliationStatus ReconciliationStatusProvider
 }
 
 func NewServer(
 	runtimeManager *runtime.Manager,
 	setupService SetupService,
+	reconciliationStatus ReconciliationStatusProvider,
 ) *Server {
 	return &Server{
-		runtime: runtimeManager,
-		setup:   setupService,
+		runtime:              runtimeManager,
+		setup:                setupService,
+		reconciliationStatus: reconciliationStatus,
 	}
 }
 
@@ -46,6 +54,8 @@ func (s *Server) Router() http.Handler {
 	router := chi.NewRouter()
 
 	router.Get("/health", healthHandler)
+	router.Get("/ready", s.ready)
+	router.Get("/api/v1/status", s.status)
 	router.Get("/api/v1/servers", s.listServers)
 	router.Get("/api/v1/routes", s.listRoutes)
 	router.Get("/api/v1/setup", s.getSetupStatus)
@@ -53,6 +63,127 @@ func (s *Server) Router() http.Handler {
 	router.Put("/api/v1/settings", s.updateSettings)
 
 	return router
+}
+
+type readiness struct {
+	Ready  bool
+	Reason string
+}
+
+type reconciliationStatusResponse struct {
+	InProgress          bool    `json:"in_progress"`
+	LastOutcome         *string `json:"last_outcome"`
+	LastStartedAt       *string `json:"last_started_at"`
+	LastCompletedAt     *string `json:"last_completed_at"`
+	LastSuccessAt       *string `json:"last_success_at"`
+	LastDurationMS      int64   `json:"last_duration_ms"`
+	ConsecutiveFailures int     `json:"consecutive_failures"`
+	LastError           *string `json:"last_error"`
+}
+
+type statusResponse struct {
+	SetupCompleted  bool                         `json:"setup_completed"`
+	Ready           bool                         `json:"ready"`
+	ReadinessReason string                       `json:"readiness_reason"`
+	Reconciliation  reconciliationStatusResponse `json:"reconciliation"`
+}
+
+func readinessFor(
+	completed bool,
+	status runtime.ReconciliationStatus,
+) readiness {
+	if !completed {
+		return readiness{Reason: "setup_incomplete"}
+	}
+
+	switch {
+	case status.LastOutcome == nil,
+		*status.LastOutcome == runtime.ReconciliationOutcomeNotConfigured:
+		return readiness{Reason: "reconciliation_pending"}
+	case *status.LastOutcome == runtime.ReconciliationOutcomeFailure:
+		return readiness{Reason: "reconciliation_failed"}
+	case *status.LastOutcome == runtime.ReconciliationOutcomeSuccess:
+		return readiness{Ready: true, Reason: "ready"}
+	default:
+		return readiness{Reason: "reconciliation_pending"}
+	}
+}
+
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	completed, err := s.setup.IsSetupComplete(r.Context())
+	if err != nil {
+		slog.Error("get readiness", "error", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"ready":  false,
+			"reason": "status_unavailable",
+		})
+		return
+	}
+	result := readinessFor(completed, s.reconciliationStatus.Snapshot())
+
+	statusCode := http.StatusServiceUnavailable
+	if result.Ready {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(w, statusCode, map[string]any{
+		"ready":  result.Ready,
+		"reason": result.Reason,
+	})
+}
+
+func (s *Server) status(w http.ResponseWriter, r *http.Request) {
+	setupCompleted, err := s.setup.IsSetupComplete(r.Context())
+	if err != nil {
+		slog.Error("get application status", "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to get application status")
+		return
+	}
+
+	reconciliationStatus := s.reconciliationStatus.Snapshot()
+	result := readinessFor(setupCompleted, reconciliationStatus)
+
+	writeJSON(w, http.StatusOK, statusResponse{
+		SetupCompleted:  setupCompleted,
+		Ready:           result.Ready,
+		ReadinessReason: result.Reason,
+		Reconciliation: reconciliationResponse(
+			reconciliationStatus,
+		),
+	})
+}
+
+func reconciliationResponse(
+	status runtime.ReconciliationStatus,
+) reconciliationStatusResponse {
+	return reconciliationStatusResponse{
+		InProgress:          status.InProgress,
+		LastOutcome:         outcomeString(status.LastOutcome),
+		LastStartedAt:       timestampString(status.LastStartedAt),
+		LastCompletedAt:     timestampString(status.LastCompletedAt),
+		LastSuccessAt:       timestampString(status.LastSuccessAt),
+		LastDurationMS:      status.LastDurationMS,
+		ConsecutiveFailures: status.ConsecutiveFailures,
+		LastError:           status.LastError,
+	}
+}
+
+func outcomeString(value *runtime.ReconciliationOutcome) *string {
+	if value == nil {
+		return nil
+	}
+
+	result := string(*value)
+	return &result
+}
+
+func timestampString(value *time.Time) *string {
+	if value == nil {
+		return nil
+	}
+
+	result := value.UTC().Format(time.RFC3339Nano)
+	return &result
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {

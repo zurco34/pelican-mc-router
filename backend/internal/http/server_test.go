@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
@@ -42,6 +44,17 @@ type fakeSetupService struct {
 	completed bool
 	err       error
 	received  settings.Settings
+}
+
+type fakeStatusProvider struct {
+	snapshots []runtime.ReconciliationStatus
+	calls     int
+}
+
+func (f *fakeStatusProvider) Snapshot() runtime.ReconciliationStatus {
+	result := f.snapshots[f.calls]
+	f.calls++
+	return result
 }
 
 func (f *fakeSetupService) IsSetupComplete(
@@ -82,6 +95,7 @@ func newTestServer(
 	return NewServer(
 		runtimeManager,
 		setupService,
+		runtime.NewReconciliationTracker(),
 	)
 }
 
@@ -115,6 +129,166 @@ func TestHealthHandler(t *testing.T) {
 			got,
 			"text/plain; charset=utf-8",
 		)
+	}
+}
+
+type testReconciliationResponse struct {
+	InProgress          bool    `json:"in_progress"`
+	LastOutcome         *string `json:"last_outcome"`
+	LastStartedAt       *string `json:"last_started_at"`
+	LastCompletedAt     *string `json:"last_completed_at"`
+	LastSuccessAt       *string `json:"last_success_at"`
+	LastDurationMS      int64   `json:"last_duration_ms"`
+	ConsecutiveFailures int     `json:"consecutive_failures"`
+	LastError           *string `json:"last_error"`
+}
+
+type testStatusResponse struct {
+	SetupCompleted  bool                       `json:"setup_completed"`
+	Ready           bool                       `json:"ready"`
+	ReadinessReason string                     `json:"readiness_reason"`
+	Reconciliation  testReconciliationResponse `json:"reconciliation"`
+}
+
+func TestStatusEndpoint(t *testing.T) {
+	started := time.Date(2026, 7, 29, 6, 45, 0, 0, time.UTC)
+	completed := started.Add(125 * time.Millisecond)
+	success := runtime.ReconciliationOutcomeSuccess
+	failure := runtime.ReconciliationOutcomeFailure
+	sanitized := "route synchronization failed"
+
+	tests := []struct {
+		name           string
+		setup          *fakeSetupService
+		status         runtime.ReconciliationStatus
+		wantHTTPStatus int
+		wantReady      bool
+		wantReason     string
+	}{
+		{"before setup", &fakeSetupService{}, runtime.ReconciliationStatus{}, http.StatusOK, false, "setup_incomplete"},
+		{"pending", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{}, http.StatusOK, false, "reconciliation_pending"},
+		{"success", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{LastOutcome: &success, LastStartedAt: &started, LastCompletedAt: &completed, LastSuccessAt: &completed, LastDurationMS: 125}, http.StatusOK, true, "ready"},
+		{"success in progress", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{InProgress: true, LastOutcome: &success, LastStartedAt: &completed, LastCompletedAt: &completed, LastSuccessAt: &completed}, http.StatusOK, true, "ready"},
+		{"failure", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{LastOutcome: &failure, LastStartedAt: &started, LastCompletedAt: &completed, LastSuccessAt: &started, LastDurationMS: 125, ConsecutiveFailures: 2, LastError: &sanitized}, http.StatusOK, false, "reconciliation_failed"},
+		{"setup error", &fakeSetupService{err: errors.New("https://secret.example/api-key")}, runtime.ReconciliationStatus{}, http.StatusInternalServerError, false, ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := &fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{test.status}}
+			server := NewServer(runtime.New(), test.setup, provider)
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
+			raw := recorder.Body.Bytes()
+			if recorder.Code != test.wantHTTPStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantHTTPStatus)
+			}
+			if strings.Contains(string(raw), "secret.example") || strings.Contains(string(raw), "api-key") {
+				t.Fatalf("secret exposed in response: %s", raw)
+			}
+			if test.setup.err != nil {
+				var body struct {
+					Error string `json:"error"`
+				}
+				decodeStrictJSON(t, raw, &body)
+				if body.Error != "failed to get application status" {
+					t.Fatalf("error = %q", body.Error)
+				}
+				return
+			}
+			if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("content type = %q", got)
+			}
+			var body testStatusResponse
+			decodeStrictJSON(t, raw, &body)
+			if body.Ready != test.wantReady || body.ReadinessReason != test.wantReason {
+				t.Fatalf("response = %+v", body)
+			}
+			if test.name == "success" && (body.Reconciliation.LastStartedAt == nil || *body.Reconciliation.LastStartedAt != "2026-07-29T06:45:00Z" || body.Reconciliation.LastCompletedAt == nil || *body.Reconciliation.LastCompletedAt != "2026-07-29T06:45:00.125Z") {
+				t.Fatalf("timestamps = %+v", body.Reconciliation)
+			}
+			if test.name == "failure" && (body.Reconciliation.LastError == nil || *body.Reconciliation.LastError != sanitized || body.Reconciliation.LastSuccessAt == nil || *body.Reconciliation.LastSuccessAt != "2026-07-29T06:45:00Z") {
+				t.Fatalf("failure response = %+v", body.Reconciliation)
+			}
+		})
+	}
+}
+
+func TestStatusEndpointUsesOneSnapshot(t *testing.T) {
+	success := runtime.ReconciliationOutcomeSuccess
+	failure := runtime.ReconciliationOutcomeFailure
+	provider := &fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{{LastOutcome: &success}, {LastOutcome: &failure}}}
+	server := NewServer(runtime.New(), &fakeSetupService{completed: true}, provider)
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
+	if provider.calls != 1 {
+		t.Fatalf("Snapshot() calls = %d, want 1", provider.calls)
+	}
+	var body testStatusResponse
+	decodeStrictJSON(t, recorder.Body.Bytes(), &body)
+	if !body.Ready || body.Reconciliation.LastOutcome == nil || *body.Reconciliation.LastOutcome != "success" {
+		t.Fatalf("response = %+v", body)
+	}
+}
+
+func decodeStrictJSON(t *testing.T, raw []byte, target any) {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReadyReasons(t *testing.T) {
+	tests := []struct {
+		name       string
+		completed  bool
+		setupErr   error
+		configure  func(*runtime.ReconciliationTracker)
+		wantStatus int
+		wantReason string
+	}{
+		{"setup incomplete", false, nil, nil, http.StatusServiceUnavailable, "setup_incomplete"},
+		{"pending", true, nil, nil, http.StatusServiceUnavailable, "reconciliation_pending"},
+		{"failed", true, nil, func(tracker *runtime.ReconciliationTracker) { tracker.Start(); tracker.CompleteRuntimeBuildFailure() }, http.StatusServiceUnavailable, "reconciliation_failed"},
+		{"ready", true, nil, func(tracker *runtime.ReconciliationTracker) { tracker.Start(); tracker.CompleteSuccess() }, http.StatusOK, "ready"},
+		{"ready during refresh", true, nil, func(tracker *runtime.ReconciliationTracker) {
+			tracker.Start()
+			tracker.CompleteSuccess()
+			tracker.Start()
+		}, http.StatusOK, "ready"},
+		{"status unavailable", true, errors.New("secret-key"), nil, http.StatusServiceUnavailable, "status_unavailable"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tracker := runtime.NewReconciliationTracker()
+			if test.configure != nil {
+				test.configure(tracker)
+			}
+			server := NewServer(runtime.New(), &fakeSetupService{completed: test.completed, err: test.setupErr}, tracker)
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/ready", nil))
+			raw := recorder.Body.Bytes()
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("content type = %q", got)
+			}
+			if strings.Contains(string(raw), "secret-key") {
+				t.Fatalf("secret exposed in response: %s", raw)
+			}
+			var body struct {
+				Ready  bool   `json:"ready"`
+				Reason string `json:"reason"`
+			}
+			decodeStrictJSON(t, raw, &body)
+			if body.Reason != test.wantReason || body.Ready != (test.wantStatus == http.StatusOK) {
+				t.Fatalf("body = %+v", body)
+			}
+		})
 	}
 }
 

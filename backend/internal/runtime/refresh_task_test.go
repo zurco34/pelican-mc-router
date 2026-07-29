@@ -87,6 +87,7 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 		"",
 		manager,
 		synchronizer,
+		NewReconciliationTracker(),
 	)
 
 	err := task.Refresh(context.Background())
@@ -115,6 +116,11 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 
 	if manager.Routing() == nil {
 		t.Fatal("runtime routing service is nil")
+	}
+
+	status := task.ReconciliationTracker().Snapshot()
+	if status.LastOutcome == nil || *status.LastOutcome != ReconciliationOutcomeSuccess {
+		t.Fatalf("reconciliation status = %+v, want success", status)
 	}
 }
 
@@ -147,6 +153,7 @@ func TestRefreshTaskPreservesRuntimeWhenRouteSynchronizationFails(
 		"",
 		manager,
 		synchronizer,
+		NewReconciliationTracker(),
 	)
 
 	err := task.Refresh(context.Background())
@@ -179,6 +186,11 @@ func TestRefreshTaskPreservesRuntimeWhenRouteSynchronizationFails(
 			"failed synchronization replaced the existing routing service",
 		)
 	}
+
+	status := task.ReconciliationTracker().Snapshot()
+	if status.LastOutcome == nil || *status.LastOutcome != ReconciliationOutcomeFailure || status.LastError == nil || *status.LastError != "route synchronization failed" {
+		t.Fatalf("reconciliation status = %+v, want route synchronization failure", status)
+	}
 }
 
 func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
@@ -193,6 +205,7 @@ func TestRefreshTaskSerializesConcurrentRefreshes(t *testing.T) {
 		"",
 		New(),
 		nil,
+		NewReconciliationTracker(),
 	)
 
 	results := make(chan error, 2)
@@ -277,6 +290,7 @@ func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 		"",
 		manager,
 		nil,
+		NewReconciliationTracker(),
 	)
 
 	err := task.Refresh(context.Background())
@@ -291,6 +305,11 @@ func TestRefreshTaskClearsRuntimeWhenSetupIncomplete(t *testing.T) {
 	if manager.Routing() != nil {
 		t.Fatal("runtime routing service is not nil")
 	}
+
+	status := task.ReconciliationTracker().Snapshot()
+	if status.LastOutcome == nil || *status.LastOutcome != ReconciliationOutcomeNotConfigured || status.LastError != nil || status.ConsecutiveFailures != 0 {
+		t.Fatalf("reconciliation status = %+v, want not configured", status)
+	}
 }
 
 func TestRefreshTaskReturnsSetupStatusError(t *testing.T) {
@@ -304,6 +323,7 @@ func TestRefreshTaskReturnsSetupStatusError(t *testing.T) {
 		"",
 		New(),
 		nil,
+		NewReconciliationTracker(),
 	)
 
 	err := task.Refresh(context.Background())
@@ -316,6 +336,11 @@ func TestRefreshTaskReturnsSetupStatusError(t *testing.T) {
 			"Refresh() error = %q, want setup status context",
 			err,
 		)
+	}
+
+	status := task.ReconciliationTracker().Snapshot()
+	if status.LastOutcome == nil || *status.LastOutcome != ReconciliationOutcomeFailure || status.LastError == nil || *status.LastError != "runtime build failed" {
+		t.Fatalf("reconciliation status = %+v, want runtime build failure", status)
 	}
 }
 
@@ -340,6 +365,7 @@ func TestRefreshTaskReturnsLoadError(t *testing.T) {
 		"",
 		manager,
 		nil,
+		NewReconciliationTracker(),
 	)
 
 	err := task.Refresh(context.Background())
@@ -388,6 +414,7 @@ func TestRefreshTaskRunDelegatesToRefresh(t *testing.T) {
 		"",
 		manager,
 		nil,
+		NewReconciliationTracker(),
 	)
 
 	err := task.Run(context.Background())

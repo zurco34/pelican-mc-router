@@ -48,6 +48,7 @@ func Run() error {
 	)
 
 	runtimeManager := runtime.New()
+	reconciliationTracker := runtime.NewReconciliationTracker()
 
 	routeController, err := newRouteController(*cfg)
 	if err != nil {
@@ -73,6 +74,7 @@ func Run() error {
 		cfg.Discovery.WildcardBackendHost,
 		runtimeManager,
 		routeSynchronizer,
+		reconciliationTracker,
 	)
 
 	setupService := setup.NewService(
@@ -103,6 +105,7 @@ func Run() error {
 	httpRouter := api.NewServer(
 		runtimeManager,
 		setupService,
+		reconciliationTracker,
 	).Router()
 
 	address := serverAddress(cfg.Server)
