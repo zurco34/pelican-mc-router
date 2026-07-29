@@ -17,7 +17,7 @@ authorize that action or produce consistent denial behavior.
 
 ## Decision
 
-- Dashboard authentication is opt-in and uses verified OpenID Connect ID tokens.
+- Management and dashboard authentication use verified OpenID Connect ID tokens.
   An authenticated reverse proxy or SSO obtains the token and forwards it in
   the `Authorization: Bearer` request header.
 - When enabled, the application discovers the configured HTTPS issuer during
@@ -34,18 +34,17 @@ authorize that action or produce consistent denial behavior.
   `X-Pelican-MC-Router-CSRF: 1` request header, uses the existing serialized
   refresh path with the request context, and records only generic action
   lifecycle events without an identity or token.
-- `/health`, `/ready`, `/metrics`, and the existing versioned API remain outside
-  this middleware. The deployment's private binding or authenticated proxy
-  boundary remains required. ADR-0007 supersedes this endpoint-policy exception
-  for the v0.3 management-plane security work.
+- `/health`, `/ready`, and `/metrics` remain public operational endpoints.
+  Versioned management APIs require the viewer or operator role defined by
+  ADR-0007; missing management authorization fails closed. The deployment's
+  private binding or authenticated proxy boundary remains required.
 - `viewer` is read-only. The configured `operator` role may authorize narrowly
   scoped mutations only after a separate design defines CSRF protection,
   request serialization, audit events, and cancellation behavior.
 
 ## Consequences
 
-Existing deployments retain their current read-only dashboard behavior unless
-OIDC is explicitly enabled. Enabling it requires an SSO or reverse proxy able
+Management deployment requires an SSO or reverse proxy able
 to forward a verified token, an HTTPS issuer URL, the expected audience, and a
 role claim. If provider discovery fails at startup, the process fails closed.
 

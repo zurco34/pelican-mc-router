@@ -4,7 +4,7 @@
 
 Pelican API credentials, bootstrap tokens, routing topology, and management
 authority are sensitive. The service trusts only mounted secret files, verified
-OIDC tokens where enabled, the local SQLite volume, the Pelican API, and a
+OIDC tokens for management access, the local SQLite volume, the Pelican API, and a
 private routing-backend control plane.
 
 ## Controls
@@ -14,8 +14,10 @@ private routing-backend control plane.
 - New Pelican credentials are file references, not request-body secrets.
 - Operational endpoints are unauthenticated by design and must be protected by
   deployment network boundaries.
-- API responses, logs, metrics, history, fixtures, and alerts exclude token
-  values, secret names, raw errors, URLs, hostnames, and server identifiers.
+- Public operational responses, logs, metrics, history, fixtures, and alerts
+  exclude token values, secret names, raw errors, URLs, hostnames, and server
+  identifiers. Authenticated viewer/operator topology responses may contain
+  server and route data; they never contain credentials or raw diagnostics.
 - One active writer per managed route boundary is supported; active-active
   control planes are not.
 - Containers run non-root with a read-only filesystem, dropped capabilities,
