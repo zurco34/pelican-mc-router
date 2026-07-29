@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
+	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
@@ -108,7 +109,7 @@ func Run(ctx context.Context) error {
 
 	runtimeScheduler := scheduler.NewTicker()
 
-	httpRouter := api.NewServer(
+	apiServer := api.NewServer(
 		runtimeManager,
 		setupService,
 		reconciliationTracker,
@@ -118,7 +119,18 @@ func Run(ctx context.Context) error {
 		setupService,
 		reconciliationTracker,
 		buildinfo.Current(),
-	)).Router()
+	))
+	if cfg.DashboardAuth.Enabled {
+		authorizer, err := dashboardauth.New(ctx, cfg.DashboardAuth)
+		if err != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return nil
+			}
+			return fmt.Errorf("create dashboard authorizer: %w", err)
+		}
+		apiServer.WithDashboardAuthorization(authorizer)
+	}
+	httpRouter := apiServer.Router()
 
 	address := serverAddress(cfg.Server)
 

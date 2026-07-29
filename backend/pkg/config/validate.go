@@ -13,26 +13,32 @@ const (
 )
 
 var (
-	ErrInvalidServerPort               = errors.New("server port must be between 1 and 65535")
-	ErrInvalidServerReadHeaderTimeout  = errors.New("server read header timeout must be greater than zero")
-	ErrInvalidServerReadTimeout        = errors.New("server read timeout must be greater than zero")
-	ErrInvalidServerWriteTimeout       = errors.New("server write timeout must be greater than zero")
-	ErrInvalidServerIdleTimeout        = errors.New("server idle timeout must be greater than zero")
-	ErrInvalidRetryAttempts            = errors.New("retry attempts must be greater than zero")
-	ErrInvalidRetryInitialBackoff      = errors.New("retry initial backoff must be greater than zero")
-	ErrInvalidRetryMaxBackoff          = errors.New("retry max backoff must be greater than or equal to initial backoff")
-	ErrMissingPelicanURL               = errors.New("pelican URL is required")
-	ErrInvalidPelicanURL               = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
-	ErrMissingPelicanAPIKey            = errors.New("pelican API key is required")
-	ErrInvalidPelicanTimeout           = errors.New("pelican timeout must be greater than zero")
-	ErrInvalidDiscoveryInterval        = errors.New("discovery interval must be greater than zero")
-	ErrMissingRouterDomain             = errors.New("router domain is required")
-	ErrMissingInfraredProxiesPath      = errors.New("infrared proxies path is required")
-	ErrMissingInfraredReloadMarkerPath = errors.New("infrared reload marker path is required")
-	ErrUnsupportedRouterBackend        = errors.New("router backend is unsupported")
-	ErrMissingMCRouterAPIURL           = errors.New("mc-router API URL is required")
-	ErrInvalidMCRouterAPIURL           = errors.New("mc-router API URL must be a valid HTTP or HTTPS URL")
-	ErrMissingDatabasePath             = errors.New("database path is required")
+	ErrInvalidServerPort                    = errors.New("server port must be between 1 and 65535")
+	ErrInvalidServerReadHeaderTimeout       = errors.New("server read header timeout must be greater than zero")
+	ErrInvalidServerReadTimeout             = errors.New("server read timeout must be greater than zero")
+	ErrInvalidServerWriteTimeout            = errors.New("server write timeout must be greater than zero")
+	ErrInvalidServerIdleTimeout             = errors.New("server idle timeout must be greater than zero")
+	ErrInvalidRetryAttempts                 = errors.New("retry attempts must be greater than zero")
+	ErrInvalidRetryInitialBackoff           = errors.New("retry initial backoff must be greater than zero")
+	ErrInvalidRetryMaxBackoff               = errors.New("retry max backoff must be greater than or equal to initial backoff")
+	ErrMissingDashboardAuthIssuerURL        = errors.New("dashboard auth issuer URL is required when enabled")
+	ErrInvalidDashboardAuthIssuerURL        = errors.New("dashboard auth issuer URL must be a valid HTTPS URL")
+	ErrMissingDashboardAuthAudience         = errors.New("dashboard auth audience is required when enabled")
+	ErrMissingDashboardAuthRoleClaim        = errors.New("dashboard auth role claim is required when enabled")
+	ErrMissingDashboardAuthRequiredRole     = errors.New("dashboard auth required role is required when enabled")
+	ErrInvalidDashboardAuthDiscoveryTimeout = errors.New("dashboard auth discovery timeout must be greater than zero")
+	ErrMissingPelicanURL                    = errors.New("pelican URL is required")
+	ErrInvalidPelicanURL                    = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
+	ErrMissingPelicanAPIKey                 = errors.New("pelican API key is required")
+	ErrInvalidPelicanTimeout                = errors.New("pelican timeout must be greater than zero")
+	ErrInvalidDiscoveryInterval             = errors.New("discovery interval must be greater than zero")
+	ErrMissingRouterDomain                  = errors.New("router domain is required")
+	ErrMissingInfraredProxiesPath           = errors.New("infrared proxies path is required")
+	ErrMissingInfraredReloadMarkerPath      = errors.New("infrared reload marker path is required")
+	ErrUnsupportedRouterBackend             = errors.New("router backend is unsupported")
+	ErrMissingMCRouterAPIURL                = errors.New("mc-router API URL is required")
+	ErrInvalidMCRouterAPIURL                = errors.New("mc-router API URL must be a valid HTTP or HTTPS URL")
+	ErrMissingDatabasePath                  = errors.New("database path is required")
 )
 
 func (c Config) ValidateInfrastructure() error {
@@ -82,6 +88,40 @@ func (c Config) ValidateInfrastructure() error {
 	}
 	if c.Retry.MaxBackoff < c.Retry.InitialBackoff {
 		validationErrors = append(validationErrors, ErrInvalidRetryMaxBackoff)
+	}
+	if err := validateDashboardAuth(c.DashboardAuth); err != nil {
+		validationErrors = append(validationErrors, err)
+	}
+
+	return errors.Join(validationErrors...)
+}
+
+func validateDashboardAuth(cfg DashboardAuthConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+
+	var validationErrors []error
+	issuerURL := strings.TrimSpace(cfg.IssuerURL)
+	if issuerURL == "" {
+		validationErrors = append(validationErrors, ErrMissingDashboardAuthIssuerURL)
+	} else {
+		parsedURL, err := url.ParseRequestURI(issuerURL)
+		if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" {
+			validationErrors = append(validationErrors, ErrInvalidDashboardAuthIssuerURL)
+		}
+	}
+	if strings.TrimSpace(cfg.Audience) == "" {
+		validationErrors = append(validationErrors, ErrMissingDashboardAuthAudience)
+	}
+	if strings.TrimSpace(cfg.RoleClaim) == "" {
+		validationErrors = append(validationErrors, ErrMissingDashboardAuthRoleClaim)
+	}
+	if strings.TrimSpace(cfg.RequiredRole) == "" {
+		validationErrors = append(validationErrors, ErrMissingDashboardAuthRequiredRole)
+	}
+	if cfg.DiscoveryTimeout <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidDashboardAuthDiscoveryTimeout)
 	}
 
 	return errors.Join(validationErrors...)

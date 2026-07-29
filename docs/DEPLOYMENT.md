@@ -329,6 +329,25 @@ reconciliation. Direct public dashboard exposure is unsupported. See
 [ADR-0005](adr/ADR-0005-dashboard-security-model.md) for the security model and
 the prerequisites for future write actions.
 
+### Optional dashboard OIDC protection
+
+Set `PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED=true` only when an authenticated
+reverse proxy or SSO forwards a verified OpenID Connect ID token as an
+`Authorization: Bearer` header. Configure its HTTPS issuer, the expected
+audience, the array-valued role claim, and the required role (normally
+`viewer`). The service validates provider metadata during startup and fails
+closed if that check cannot complete.
+
+The application returns generic HTTP `401` for absent or invalid tokens and
+HTTP `403` for authenticated identities without the role. It does not log,
+return, or expose token contents, subjects, or roles in metrics. Keep the
+existing private binding or proxy authentication boundary in place; OIDC does
+not make direct public API exposure supported.
+
+No dashboard mutations are available. Future operator actions require a
+separate CSRF, request-serialization, and audit-safe event design. See
+[ADR-0006](adr/ADR-0006-dashboard-oidc-authorization.md).
+
 ## Temporary mc-router route file
 
 The deployment configures:

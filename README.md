@@ -121,6 +121,8 @@ Only one routing backend is active for a deployment.
 - `GET /dashboard` renders the same cached operational state for browser use.
   It is read-only, does not trigger reconciliation, and must be kept private or
   behind authenticated reverse-proxy access control.
+  Optional OIDC protection verifies a forwarded bearer token and a required
+  role; see [dashboard OIDC authorization](docs/adr/ADR-0006-dashboard-oidc-authorization.md).
 - `GET /metrics` exposes Prometheus text metrics. It includes standard Go and
   process collectors plus these reconciliation metrics:
   - Counter: `pelican_mc_router_reconciliation_total{result}` with fixed result

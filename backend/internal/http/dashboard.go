@@ -1,9 +1,12 @@
 package api
 
 import (
+	"errors"
 	"html/template"
 	"net/http"
 	"time"
+
+	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 )
 
 var dashboardTemplate = template.Must(template.New("dashboard").Funcs(template.FuncMap{
@@ -31,6 +34,12 @@ func (s *Server) dashboardPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if s.dashboardAuth != nil {
+		if err := s.dashboardAuth.Authorize(r.Context(), r); err != nil {
+			dashboardAuthorizationError(w, err)
+			return
+		}
+	}
 	snapshot, err := s.dashboard.Snapshot(r.Context())
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "dashboard status unavailable")
@@ -40,4 +49,14 @@ func (s *Server) dashboardPage(w http.ResponseWriter, r *http.Request) {
 	if err := dashboardTemplate.Execute(w, snapshot); err != nil {
 		return
 	}
+}
+
+func dashboardAuthorizationError(w http.ResponseWriter, err error) {
+	status := http.StatusUnauthorized
+	message := "dashboard authentication required"
+	if errors.Is(err, dashboardauth.ErrForbidden) {
+		status = http.StatusForbidden
+		message = "dashboard access denied"
+	}
+	writeJSONError(w, status, message)
 }

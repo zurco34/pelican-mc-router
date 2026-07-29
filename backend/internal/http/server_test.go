@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
+	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
@@ -52,6 +53,12 @@ type fakeSetupService struct {
 type fakeStatusProvider struct {
 	snapshots []runtime.ReconciliationStatus
 	calls     int
+}
+
+type fakeDashboardAuthorizer struct{ err error }
+
+func (f fakeDashboardAuthorizer) Authorize(context.Context, *http.Request) error {
+	return f.err
 }
 
 func (f *fakeStatusProvider) Snapshot() runtime.ReconciliationStatus {
@@ -231,6 +238,34 @@ func TestDashboardPageUnavailableDoesNotExposeSetupError(t *testing.T) {
 	}
 	if body := recorder.Body.String(); !strings.Contains(body, "dashboard status unavailable") || strings.Contains(body, secret) {
 		t.Fatalf("unexpected error response: %s", body)
+	}
+}
+
+func TestDashboardPageAuthorization(t *testing.T) {
+	tests := []struct {
+		name       string
+		authorizer fakeDashboardAuthorizer
+		wantStatus int
+		wantBody   string
+	}{
+		{"unauthenticated", fakeDashboardAuthorizer{err: dashboardauth.ErrUnauthenticated}, http.StatusUnauthorized, "dashboard authentication required"},
+		{"forbidden", fakeDashboardAuthorizer{err: dashboardauth.ErrForbidden}, http.StatusForbidden, "dashboard access denied"},
+		{"authorization error", fakeDashboardAuthorizer{err: errors.New("dashboard-auth-secret")}, http.StatusUnauthorized, "dashboard authentication required"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithDashboard(
+				dashboard.NewService(&fakeSetupService{}, runtime.NewReconciliationTracker(), buildinfo.Info{}),
+			).WithDashboardAuthorization(test.authorizer)
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			if body := recorder.Body.String(); !strings.Contains(body, test.wantBody) || strings.Contains(body, "dashboard-auth-secret") {
+				t.Fatalf("response = %s, want %q", body, test.wantBody)
+			}
+		})
 	}
 }
 

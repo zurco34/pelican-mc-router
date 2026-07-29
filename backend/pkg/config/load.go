@@ -60,6 +60,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("retry.initial_backoff", 200*time.Millisecond)
 	v.SetDefault("retry.max_backoff", 2*time.Second)
 
+	v.SetDefault("dashboard_auth.enabled", false)
+	v.SetDefault("dashboard_auth.role_claim", "roles")
+	v.SetDefault("dashboard_auth.required_role", "viewer")
+	v.SetDefault("dashboard_auth.discovery_timeout", 5*time.Second)
+
 	v.SetDefault("discovery.interval", 30*time.Second)
 	v.SetDefault("discovery.wildcard_backend_host", "")
 

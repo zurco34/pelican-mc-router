@@ -76,6 +76,31 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 	}
 }
 
+func TestConfigValidateInfrastructureDashboardAuth(t *testing.T) {
+	tests := []struct {
+		name    string
+		auth    DashboardAuthConfig
+		wantErr error
+	}{
+		{name: "disabled"},
+		{name: "enabled", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}},
+		{name: "missing issuer", auth: DashboardAuthConfig{Enabled: true, Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthIssuerURL},
+		{name: "non HTTPS issuer", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "http://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrInvalidDashboardAuthIssuerURL},
+		{name: "missing audience", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", RoleClaim: "roles", RequiredRole: "viewer", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthAudience},
+		{name: "missing role", auth: DashboardAuthConfig{Enabled: true, IssuerURL: "https://issuer.example", Audience: "pelican-mc-router", RoleClaim: "roles", DiscoveryTimeout: time.Second}, wantErr: ErrMissingDashboardAuthRequiredRole},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.DashboardAuth = test.auth
+			err := cfg.ValidateInfrastructure()
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("ValidateInfrastructure() error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestConfigValidateInfrastructureRejectsMissingInfraredProxiesPath(
 	t *testing.T,
 ) {
