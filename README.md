@@ -15,7 +15,7 @@ backend.
 - Optional Infrared configuration generation
 - Deterministic and convergent route reconciliation
 - Docker-first deployment model
-- REST API and web dashboard under development
+- REST API and a planned read-only dashboard under development
 
 ## Supported routing backends
 
