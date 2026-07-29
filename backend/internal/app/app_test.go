@@ -1,7 +1,9 @@
 package app
 
 import (
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
@@ -50,5 +52,36 @@ func TestServerAddress(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestNewHTTPServerConfiguresTimeouts(t *testing.T) {
+	handler := http.NewServeMux()
+	cfg := config.ServerConfig{
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       time.Minute,
+	}
+
+	server := newHTTPServer("127.0.0.1:8080", handler, cfg)
+
+	if server.Addr != "127.0.0.1:8080" {
+		t.Errorf("Addr = %q, want 127.0.0.1:8080", server.Addr)
+	}
+	if server.Handler != handler {
+		t.Error("Handler was not preserved")
+	}
+	if server.ReadHeaderTimeout != cfg.ReadHeaderTimeout {
+		t.Errorf("ReadHeaderTimeout = %v, want %v", server.ReadHeaderTimeout, cfg.ReadHeaderTimeout)
+	}
+	if server.ReadTimeout != cfg.ReadTimeout {
+		t.Errorf("ReadTimeout = %v, want %v", server.ReadTimeout, cfg.ReadTimeout)
+	}
+	if server.WriteTimeout != cfg.WriteTimeout {
+		t.Errorf("WriteTimeout = %v, want %v", server.WriteTimeout, cfg.WriteTimeout)
+	}
+	if server.IdleTimeout != cfg.IdleTimeout {
+		t.Errorf("IdleTimeout = %v, want %v", server.IdleTimeout, cfg.IdleTimeout)
 	}
 }

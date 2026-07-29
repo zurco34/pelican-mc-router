@@ -14,6 +14,10 @@ const (
 
 var (
 	ErrInvalidServerPort               = errors.New("server port must be between 1 and 65535")
+	ErrInvalidServerReadHeaderTimeout  = errors.New("server read header timeout must be greater than zero")
+	ErrInvalidServerReadTimeout        = errors.New("server read timeout must be greater than zero")
+	ErrInvalidServerWriteTimeout       = errors.New("server write timeout must be greater than zero")
+	ErrInvalidServerIdleTimeout        = errors.New("server idle timeout must be greater than zero")
 	ErrMissingPelicanURL               = errors.New("pelican URL is required")
 	ErrInvalidPelicanURL               = errors.New("pelican URL must be a valid HTTP or HTTPS URL")
 	ErrMissingPelicanAPIKey            = errors.New("pelican API key is required")
@@ -36,6 +40,18 @@ func (c Config) ValidateInfrastructure() error {
 			validationErrors,
 			ErrInvalidServerPort,
 		)
+	}
+	if c.Server.ReadHeaderTimeout <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidServerReadHeaderTimeout)
+	}
+	if c.Server.ReadTimeout <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidServerReadTimeout)
+	}
+	if c.Server.WriteTimeout <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidServerWriteTimeout)
+	}
+	if c.Server.IdleTimeout <= 0 {
+		validationErrors = append(validationErrors, ErrInvalidServerIdleTimeout)
 	}
 
 	if strings.TrimSpace(c.Database.Path) == "" {

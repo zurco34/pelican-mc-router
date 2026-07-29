@@ -116,10 +116,7 @@ func Run(ctx context.Context) error {
 		Str("address", address).
 		Msg("starting HTTP server")
 
-	server := &http.Server{
-		Addr:    address,
-		Handler: httpRouter,
-	}
+	server := newHTTPServer(address, httpRouter, cfg.Server)
 
 	return runLifecycle(ctx, server, func(runtimeCtx context.Context) error {
 		return runtimeScheduler.Run(
@@ -128,6 +125,21 @@ func Run(ctx context.Context) error {
 			refresher,
 		)
 	})
+}
+
+func newHTTPServer(
+	address string,
+	handler http.Handler,
+	cfg config.ServerConfig,
+) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+	}
 }
 
 func serverAddress(cfg config.ServerConfig) string {

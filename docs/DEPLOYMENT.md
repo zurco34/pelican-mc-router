@@ -77,6 +77,12 @@ MINECRAFT_PORT=25565
 PELICAN_MC_ROUTER_BIND_ADDRESS=127.0.0.1
 PELICAN_MC_ROUTER_HTTP_PORT=8080
 
+# Inbound HTTP API timeouts.
+PELICAN_MC_ROUTER_SERVER_READ_HEADER_TIMEOUT=5s
+PELICAN_MC_ROUTER_SERVER_READ_TIMEOUT=15s
+PELICAN_MC_ROUTER_SERVER_WRITE_TIMEOUT=30s
+PELICAN_MC_ROUTER_SERVER_IDLE_TIMEOUT=1m
+
 # Required when Pelican allocations use 0.0.0.0 or ::.
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
@@ -89,6 +95,17 @@ The `.env` file is ignored by Git and must not be committed.
 Keep `PELICAN_MC_ROUTER_IMAGE` pinned to an exact release version in production.
 This makes upgrades explicit and prevents an unrelated moving tag from changing
 the deployed application unexpectedly.
+
+## HTTP API timeouts
+
+The HTTP API uses bounded timeouts to protect the control plane from slow or
+stalled clients. The defaults are 5 seconds for request headers, 15 seconds
+for the complete request, 30 seconds for the response, and 1 minute for idle
+keep-alive connections.
+
+All timeout values must be positive Go durations. Increase them only when a
+known API client needs longer requests or responses; excessively large values
+can allow slow clients to hold connections and reduce control-plane capacity.
 
 ## Start the stack
 

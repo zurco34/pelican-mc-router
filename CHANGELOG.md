@@ -11,6 +11,8 @@ API behavior, and deployment details may change between minor releases.
 
 - Add coordinated graceful shutdown for SIGINT and SIGTERM, including the HTTP
   server and runtime scheduler.
+- Add configurable, bounded HTTP server header, request, response, and idle
+  timeouts.
 
 ## 0.1.2
 
