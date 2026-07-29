@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
+	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
@@ -49,6 +50,10 @@ func Run() error {
 
 	runtimeManager := runtime.New()
 	reconciliationTracker := runtime.NewReconciliationTracker()
+	metricsRegistry, reconciliationMetrics, err := observability.NewRegistry()
+	if err != nil {
+		return fmt.Errorf("create metrics registry: %w", err)
+	}
 
 	routeController, err := newRouteController(*cfg)
 	if err != nil {
@@ -75,6 +80,7 @@ func Run() error {
 		runtimeManager,
 		routeSynchronizer,
 		reconciliationTracker,
+		reconciliationMetrics,
 	)
 
 	setupService := setup.NewService(
@@ -106,6 +112,7 @@ func Run() error {
 		runtimeManager,
 		setupService,
 		reconciliationTracker,
+		observability.NewHandler(metricsRegistry),
 	).Router()
 
 	address := serverAddress(cfg.Server)

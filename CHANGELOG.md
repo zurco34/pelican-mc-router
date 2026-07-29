@@ -11,6 +11,8 @@ API behavior, and deployment details may change between minor releases.
 
 - Add cached reconciliation status tracking and the `/api/v1/status` and
   `/ready` observability endpoints.
+- Add the Prometheus `/metrics` endpoint with reconciliation counters, duration
+  histogram, state gauges, and standard Go and process collectors.
 
 ## 0.1.1
 

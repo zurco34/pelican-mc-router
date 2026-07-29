@@ -21,6 +21,10 @@ type RouteSynchronizer interface {
 	Sync(context.Context, router.RouteSource) error
 }
 
+type ReconciliationObserver interface {
+	ObserveReconciliation(ReconciliationStatus)
+}
+
 type RefreshTask struct {
 	mu sync.Mutex
 
@@ -30,6 +34,7 @@ type RefreshTask struct {
 	manager             *Manager
 	synchronizer        RouteSynchronizer
 	tracker             *ReconciliationTracker
+	observer            ReconciliationObserver
 }
 
 func NewRefreshTask(
@@ -39,6 +44,7 @@ func NewRefreshTask(
 	manager *Manager,
 	synchronizer RouteSynchronizer,
 	tracker *ReconciliationTracker,
+	observer ReconciliationObserver,
 ) *RefreshTask {
 	return &RefreshTask{
 		store:               store,
@@ -47,27 +53,32 @@ func NewRefreshTask(
 		manager:             manager,
 		synchronizer:        synchronizer,
 		tracker:             tracker,
+		observer:            observer,
 	}
 }
 func (r *RefreshTask) Refresh(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tracker.Start()
+	r.observe()
 
 	discoveryService, routingService, err := r.buildRuntimeServices()
 	if err != nil {
 		r.tracker.CompleteRuntimeBuildFailure()
+		r.observe()
 		return fmt.Errorf("build runtime services: %w", err)
 	}
 	if routingService == nil {
 		r.manager.Set(nil, nil)
 		r.tracker.CompleteNotConfigured()
+		r.observe()
 		return nil
 	}
 
 	if r.synchronizer != nil {
 		if err := r.synchronizer.Sync(ctx, routingService); err != nil {
 			r.tracker.CompleteRouteSynchronizationFailure()
+			r.observe()
 			return fmt.Errorf(
 				"synchronize routes: %w",
 				err,
@@ -80,8 +91,15 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 		routingService,
 	)
 	r.tracker.CompleteSuccess()
+	r.observe()
 
 	return nil
+}
+
+func (r *RefreshTask) observe() {
+	if r.observer != nil {
+		r.observer.ObserveReconciliation(r.tracker.Snapshot())
+	}
 }
 
 func (r *RefreshTask) ReconciliationTracker() *ReconciliationTracker {

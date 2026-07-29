@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zurco34/pelican-mc-router/internal/observability"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -96,6 +97,7 @@ func newTestServer(
 		runtimeManager,
 		setupService,
 		runtime.NewReconciliationTracker(),
+		http.NotFoundHandler(),
 	)
 }
 
@@ -129,6 +131,41 @@ func TestHealthHandler(t *testing.T) {
 			got,
 			"text/plain; charset=utf-8",
 		)
+	}
+}
+
+func TestMetricsEndpoint(t *testing.T) {
+	registry, metrics, err := observability.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics.ObserveReconciliation(runtime.ReconciliationStatus{InProgress: true})
+	server := NewServer(
+		runtime.New(),
+		&fakeSetupService{},
+		runtime.NewReconciliationTracker(),
+		observability.NewHandler(registry),
+	)
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
+		t.Fatalf("content type = %q", got)
+	}
+	body := recorder.Body.String()
+	for _, metric := range []string{
+		"pelican_mc_router_reconciliation_total",
+		"go_goroutines",
+		"process_start_time_seconds",
+	} {
+		if !strings.Contains(body, metric) {
+			t.Fatalf("metric %q was not exposed", metric)
+		}
+	}
+	if strings.Contains(body, "secret-value") {
+		t.Fatalf("secret exposed in metrics: %s", body)
 	}
 }
 
@@ -176,7 +213,7 @@ func TestStatusEndpoint(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			provider := &fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{test.status}}
-			server := NewServer(runtime.New(), test.setup, provider)
+			server := NewServer(runtime.New(), test.setup, provider, http.NotFoundHandler())
 			recorder := httptest.NewRecorder()
 			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
 			raw := recorder.Body.Bytes()
@@ -218,7 +255,7 @@ func TestStatusEndpointUsesOneSnapshot(t *testing.T) {
 	success := runtime.ReconciliationOutcomeSuccess
 	failure := runtime.ReconciliationOutcomeFailure
 	provider := &fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{{LastOutcome: &success}, {LastOutcome: &failure}}}
-	server := NewServer(runtime.New(), &fakeSetupService{completed: true}, provider)
+	server := NewServer(runtime.New(), &fakeSetupService{completed: true}, provider, http.NotFoundHandler())
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
 	if provider.calls != 1 {
@@ -267,7 +304,7 @@ func TestReadyReasons(t *testing.T) {
 			if test.configure != nil {
 				test.configure(tracker)
 			}
-			server := NewServer(runtime.New(), &fakeSetupService{completed: test.completed, err: test.setupErr}, tracker)
+			server := NewServer(runtime.New(), &fakeSetupService{completed: test.completed, err: test.setupErr}, tracker, http.NotFoundHandler())
 			recorder := httptest.NewRecorder()
 			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/ready", nil))
 			raw := recorder.Body.Bytes()

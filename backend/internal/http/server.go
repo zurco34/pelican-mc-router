@@ -36,17 +36,20 @@ type Server struct {
 	runtime              *runtime.Manager
 	setup                SetupService
 	reconciliationStatus ReconciliationStatusProvider
+	metrics              http.Handler
 }
 
 func NewServer(
 	runtimeManager *runtime.Manager,
 	setupService SetupService,
 	reconciliationStatus ReconciliationStatusProvider,
+	metrics http.Handler,
 ) *Server {
 	return &Server{
 		runtime:              runtimeManager,
 		setup:                setupService,
 		reconciliationStatus: reconciliationStatus,
+		metrics:              metrics,
 	}
 }
 
@@ -54,6 +57,7 @@ func (s *Server) Router() http.Handler {
 	router := chi.NewRouter()
 
 	router.Get("/health", healthHandler)
+	router.Get("/metrics", s.metrics.ServeHTTP)
 	router.Get("/ready", s.ready)
 	router.Get("/api/v1/status", s.status)
 	router.Get("/api/v1/servers", s.listServers)

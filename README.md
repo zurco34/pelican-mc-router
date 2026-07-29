@@ -116,6 +116,18 @@ Only one routing backend is active for a deployment.
   plus cached reconciliation fields: `in_progress`, completed outcome and
   timestamps, duration, consecutive failures, and a sanitized error summary.
   It does not trigger discovery or backend work.
+- `GET /metrics` exposes Prometheus text metrics. It includes standard Go and
+  process collectors plus these reconciliation metrics:
+  - Counter: `pelican_mc_router_reconciliation_total{result}` with fixed result
+    values `not_configured`, `success`, and `failure`.
+  - Histogram: `pelican_mc_router_reconciliation_duration_seconds`.
+  - Gauges: `pelican_mc_router_reconciliation_last_success_timestamp_seconds`,
+    `pelican_mc_router_reconciliation_consecutive_failures`, and
+    `pelican_mc_router_reconciliation_in_progress`.
+
+Metrics never use server names, hostnames, URLs, or errors as labels. Metrics
+state is process-local and resets when the service restarts. `/health` remains
+the Docker liveness endpoint and `/ready` remains the readiness endpoint.
 
 ## Deployment
 
