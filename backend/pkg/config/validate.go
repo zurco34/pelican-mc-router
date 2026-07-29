@@ -21,6 +21,9 @@ var (
 	ErrInvalidRetryAttempts                 = errors.New("retry attempts must be greater than zero")
 	ErrInvalidRetryInitialBackoff           = errors.New("retry initial backoff must be greater than zero")
 	ErrInvalidRetryMaxBackoff               = errors.New("retry max backoff must be greater than or equal to initial backoff")
+	ErrMissingSecretsDirectory              = errors.New("secrets directory is required")
+	ErrInvalidSecretsDirectory              = errors.New("secrets directory must be an absolute path")
+	ErrMissingBootstrapTokenName            = errors.New("bootstrap token name is required")
 	ErrMissingDashboardAuthIssuerURL        = errors.New("dashboard auth issuer URL is required when enabled")
 	ErrInvalidDashboardAuthIssuerURL        = errors.New("dashboard auth issuer URL must be a valid HTTPS URL")
 	ErrMissingDashboardAuthAudience         = errors.New("dashboard auth audience is required when enabled")
@@ -93,8 +96,24 @@ func (c Config) ValidateInfrastructure() error {
 	if err := validateDashboardAuth(c.DashboardAuth); err != nil {
 		validationErrors = append(validationErrors, err)
 	}
+	if err := validateSecrets(c.Secrets); err != nil {
+		validationErrors = append(validationErrors, err)
+	}
 
 	return errors.Join(validationErrors...)
+}
+
+func validateSecrets(cfg SecretsConfig) error {
+	if strings.TrimSpace(cfg.Directory) == "" {
+		return ErrMissingSecretsDirectory
+	}
+	if !strings.HasPrefix(strings.TrimSpace(cfg.Directory), "/") {
+		return ErrInvalidSecretsDirectory
+	}
+	if strings.TrimSpace(cfg.BootstrapTokenName) == "" {
+		return ErrMissingBootstrapTokenName
+	}
+	return nil
 }
 
 func validateDashboardAuth(cfg DashboardAuthConfig) error {

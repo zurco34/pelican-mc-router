@@ -5,6 +5,14 @@ All notable changes to Pelican MC Router are documented in this file.
 The project follows Semantic Versioning. Until version `1.0.0`, configuration,
 API behavior, and deployment details may change between minor releases.
 
+## Unreleased
+
+### Added
+
+- Add a bounded reader contract and read-only Compose mount for future
+  file-backed bootstrap and Pelican credential secrets. Secret values remain
+  outside application configuration and `.env` files.
+
 ## 0.2.0 - 2026-07-29
 
 ### Added

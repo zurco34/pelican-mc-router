@@ -22,7 +22,8 @@ func TestConfigValidateInfrastructure(t *testing.T) {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
-		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
+		Retry:   RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
+		Secrets: SecretsConfig{Directory: "/run/secrets/pelican-mc-router", BootstrapTokenName: "bootstrap-token"},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -54,7 +55,8 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
-		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
+		Retry:   RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
+		Secrets: SecretsConfig{Directory: "/run/secrets/pelican-mc-router", BootstrapTokenName: "bootstrap-token"},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -96,6 +98,29 @@ func TestConfigValidateInfrastructureDashboardAuth(t *testing.T) {
 			cfg.DashboardAuth = test.auth
 			err := cfg.ValidateInfrastructure()
 			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("ValidateInfrastructure() error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestConfigValidateInfrastructureSecrets(t *testing.T) {
+	tests := []struct {
+		name    string
+		secrets SecretsConfig
+		wantErr error
+	}{
+		{name: "valid", secrets: SecretsConfig{Directory: "/run/secrets/pelican-mc-router", BootstrapTokenName: "bootstrap-token"}},
+		{name: "missing directory", secrets: SecretsConfig{BootstrapTokenName: "bootstrap-token"}, wantErr: ErrMissingSecretsDirectory},
+		{name: "relative directory", secrets: SecretsConfig{Directory: "secrets", BootstrapTokenName: "bootstrap-token"}, wantErr: ErrInvalidSecretsDirectory},
+		{name: "missing bootstrap token name", secrets: SecretsConfig{Directory: "/run/secrets/pelican-mc-router"}, wantErr: ErrMissingBootstrapTokenName},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.Secrets = test.secrets
+			if err := cfg.ValidateInfrastructure(); !errors.Is(err, test.wantErr) {
 				t.Fatalf("ValidateInfrastructure() error = %v, want %v", err, test.wantErr)
 			}
 		})
@@ -336,7 +361,8 @@ func validConfig() Config {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
-		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
+		Retry:   RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
+		Secrets: SecretsConfig{Directory: "/run/secrets/pelican-mc-router", BootstrapTokenName: "bootstrap-token"},
 		Router: RouterConfig{
 			Backend: "infrared",
 			Domain:  "mc.example.com",

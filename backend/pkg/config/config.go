@@ -9,6 +9,7 @@ type Config struct {
 	MCRouter      MCRouterConfig      `mapstructure:"mcrouter"`
 	Infrared      InfraredConfig      `mapstructure:"infrared"`
 	Retry         RetryConfig         `mapstructure:"retry"`
+	Secrets       SecretsConfig       `mapstructure:"secrets"`
 	DashboardAuth DashboardAuthConfig `mapstructure:"dashboard_auth"`
 	Logging       LoggingConfig       `mapstructure:"logging"`
 }

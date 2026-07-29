@@ -19,6 +19,10 @@ retry:
   initial_backoff: 200ms
   max_backoff: 2s
 
+secrets:
+  directory: "/run/secrets/pelican-mc-router"
+  bootstrap_token_name: "bootstrap-token"
+
 discovery:
   interval: 30s
   wildcard_backend_host: ""
