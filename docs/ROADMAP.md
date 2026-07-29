@@ -29,9 +29,9 @@ endpoint, trust-boundary, bootstrap, and credential-transition contract.
 
 ## v0.5.0: Operational history
 
-- [ ] Persist bounded, allowlisted reconciliation and action history.
-- [ ] Expose authenticated recent-event views and dashboard rendering.
-- [ ] Publish safe Prometheus alert examples.
+- [x] Persist bounded, allowlisted reconciliation and action history.
+- [x] Expose authenticated recent-event views and dashboard rendering.
+- [x] Publish safe Prometheus alert examples.
 
 ## v0.6.0: Recovery and lifecycle
 
