@@ -1,13 +1,15 @@
 package settings
 
 const (
-	KeyPelicanURL    = "pelican.url"
-	KeyPelicanAPIKey = "pelican.api_key"
-	KeyRouterDomain  = "router.domain"
+	KeyPelicanURL        = "pelican.url"
+	KeyPelicanAPIKey     = "pelican.api_key"
+	KeyPelicanSecretName = "pelican.secret_name"
+	KeyRouterDomain      = "router.domain"
 )
 
 type Settings struct {
-	PelicanURL    string
-	PelicanAPIKey string
-	RouterDomain  string
+	PelicanURL        string
+	PelicanAPIKey     string
+	PelicanSecretName string
+	RouterDomain      string
 }

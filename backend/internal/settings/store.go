@@ -104,18 +104,24 @@ func (s *Store) Save(value Settings) error {
 			value: value.PelicanURL,
 		},
 		{
-			key:   KeyPelicanAPIKey,
-			value: value.PelicanAPIKey,
-		},
-		{
 			key:   KeyRouterDomain,
 			value: value.RouterDomain,
 		},
+	}
+	if value.PelicanSecretName != "" {
+		values = append(values, struct{ key, value string }{KeyPelicanSecretName, value.PelicanSecretName})
+	} else {
+		values = append(values, struct{ key, value string }{KeyPelicanAPIKey, value.PelicanAPIKey})
 	}
 
 	for _, setting := range values {
 		if err := setValue(tx, setting.key, setting.value); err != nil {
 			return fmt.Errorf("save %q: %w", setting.key, err)
+		}
+	}
+	if value.PelicanSecretName != "" {
+		if _, err := tx.Exec(`DELETE FROM settings WHERE key = ?`, KeyPelicanAPIKey); err != nil {
+			return fmt.Errorf("remove legacy Pelican credential: %w", err)
 		}
 	}
 
@@ -136,10 +142,20 @@ func (s *Store) Load() (Settings, error) {
 	result.PelicanURL = pelicanURL
 
 	pelicanAPIKey, err := s.Get(KeyPelicanAPIKey)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Settings{}, fmt.Errorf("load %q: %w", KeyPelicanAPIKey, err)
 	}
-	result.PelicanAPIKey = pelicanAPIKey
+	if err == nil {
+		result.PelicanAPIKey = pelicanAPIKey
+	}
+
+	pelicanSecretName, err := s.Get(KeyPelicanSecretName)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Settings{}, fmt.Errorf("load %q: %w", KeyPelicanSecretName, err)
+	}
+	if err == nil {
+		result.PelicanSecretName = pelicanSecretName
+	}
 
 	routerDomain, err := s.Get(KeyRouterDomain)
 	if err != nil {
@@ -169,10 +185,6 @@ func (s *Store) SaveSetup(value Settings) error {
 			value: value.PelicanURL,
 		},
 		{
-			key:   KeyPelicanAPIKey,
-			value: value.PelicanAPIKey,
-		},
-		{
 			key:   KeyRouterDomain,
 			value: value.RouterDomain,
 		},
@@ -181,10 +193,20 @@ func (s *Store) SaveSetup(value Settings) error {
 			value: strconv.FormatBool(true),
 		},
 	}
+	if value.PelicanSecretName != "" {
+		values = append(values, struct{ key, value string }{KeyPelicanSecretName, value.PelicanSecretName})
+	} else {
+		values = append(values, struct{ key, value string }{KeyPelicanAPIKey, value.PelicanAPIKey})
+	}
 
 	for _, setting := range values {
 		if err := setValue(tx, setting.key, setting.value); err != nil {
 			return fmt.Errorf("save %q: %w", setting.key, err)
+		}
+	}
+	if value.PelicanSecretName != "" {
+		if _, err := tx.Exec(`DELETE FROM settings WHERE key = ?`, KeyPelicanAPIKey); err != nil {
+			return fmt.Errorf("remove legacy Pelican credential: %w", err)
 		}
 	}
 

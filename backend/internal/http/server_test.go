@@ -960,7 +960,7 @@ func TestConfigureSetup(t *testing.T) {
 
 	body := strings.NewReader(`{
 		"pelican_url": " https://panel.example.com ",
-		"pelican_api_key": " application-api-key ",
+		"pelican_secret_name": " pelican-token ",
 		"router_domain": " mc.example.com "
 	}`)
 
@@ -999,11 +999,11 @@ func TestConfigureSetup(t *testing.T) {
 		)
 	}
 
-	if got := setupService.received.PelicanAPIKey; got != "application-api-key" {
+	if got := setupService.received.PelicanSecretName; got != "pelican-token" {
 		t.Errorf(
-			"Pelican API key = %q, want %q",
+			"Pelican secret name = %q, want %q",
 			got,
-			"application-api-key",
+			"pelican-token",
 		)
 	}
 
@@ -1027,7 +1027,7 @@ func TestUpdateSettings(t *testing.T) {
 
 	body := strings.NewReader(`{
 		"pelican_url": " https://panel.example.com ",
-		"pelican_api_key": " application-api-key ",
+		"pelican_secret_name": " pelican-token ",
 		"router_domain": " mc.example.com "
 	}`)
 
@@ -1066,11 +1066,11 @@ func TestUpdateSettings(t *testing.T) {
 		)
 	}
 
-	if got := setupService.received.PelicanAPIKey; got != "application-api-key" {
+	if got := setupService.received.PelicanSecretName; got != "pelican-token" {
 		t.Errorf(
-			"Pelican API key = %q, want %q",
+			"Pelican secret name = %q, want %q",
 			got,
-			"application-api-key",
+			"pelican-token",
 		)
 	}
 
@@ -1138,7 +1138,7 @@ func TestUpdateSettingsReturnsBadRequestForUnknownField(t *testing.T) {
 		"/api/v1/settings",
 		strings.NewReader(`{
 			"pelican_url": "https://panel.example.com",
-			"pelican_api_key": "key",
+			"pelican_secret_name": "pelican-token",
 			"router_domain": "mc.example.com",
 			"unexpected": true
 		}`),
@@ -1199,7 +1199,7 @@ func TestUpdateSettingsReturnsInternalServerError(t *testing.T) {
 		"/api/v1/settings",
 		strings.NewReader(`{
 			"pelican_url": "https://panel.example.com",
-			"pelican_api_key": "key",
+			"pelican_secret_name": "pelican-token",
 			"router_domain": "mc.example.com"
 		}`),
 	)
@@ -1288,7 +1288,7 @@ func TestConfigureSetupReturnsBadRequestForUnknownField(t *testing.T) {
 		"/api/v1/setup",
 		strings.NewReader(`{
 			"pelican_url": "https://panel.example.com",
-			"pelican_api_key": "key",
+			"pelican_secret_name": "pelican-token",
 			"router_domain": "mc.example.com",
 			"unexpected": true
 		}`),
@@ -1347,7 +1347,7 @@ func TestConfigureSetupReturnsInternalServerError(t *testing.T) {
 		"/api/v1/setup",
 		strings.NewReader(`{
 			"pelican_url": "https://panel.example.com",
-			"pelican_api_key": "key",
+			"pelican_secret_name": "pelican-token",
 			"router_domain": "mc.example.com"
 		}`),
 	)
@@ -1398,7 +1398,7 @@ func TestUpdateSettingsReturnsBadRequestForMissingRouterDomain(
 		"/api/v1/settings",
 		strings.NewReader(`{
 			"pelican_url": "https://panel.example.com",
-			"pelican_api_key": "key",
+			"pelican_secret_name": "pelican-token",
 			"router_domain": ""
 		}`),
 	)
@@ -1451,7 +1451,7 @@ func TestConfigureSetupReturnsConflictWhenAlreadyConfigured(
 		"/api/v1/setup",
 		strings.NewReader(`{
 			"pelican_url": "https://panel.example.com",
-			"pelican_api_key": "key",
+			"pelican_secret_name": "pelican-token",
 			"router_domain": "mc.example.com"
 		}`),
 	)
