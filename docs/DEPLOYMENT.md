@@ -92,7 +92,7 @@ PELICAN_MC_ROUTER_RETRY_MAX_BACKOFF=2s
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.3
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -446,10 +446,10 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.3
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
 ```
 
-Replace `0.1.2` with the exact release being installed.
+Change the tag to the exact release being installed.
 
 Pull the configured images and recreate the containers:
 
@@ -483,3 +483,22 @@ curl --fail http://127.0.0.1:8080/metrics
 `/ready` may temporarily return HTTP 503 while startup reconciliation runs.
 Retry after a short wait; if it remains unavailable, use its JSON reason and
 `/api/v1/status` to diagnose the condition.
+
+## Rollback
+
+To roll back, set `PELICAN_MC_ROUTER_IMAGE` to the previously known-good
+release tag, pull it, and recreate the containers. For example, the v0.2.0
+rollback point is `0.1.3`:
+
+```dotenv
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.3
+```
+
+```bash
+docker compose pull
+docker compose up --detach --no-build
+```
+
+Retain the named volume and do not use `--volumes`. v0.2.0 does not require a
+database migration. Dashboard OIDC variables are ignored by earlier images;
+the prior private-binding or reverse-proxy access boundary remains required.
