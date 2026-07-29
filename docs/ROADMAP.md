@@ -35,8 +35,8 @@ endpoint, trust-boundary, bootstrap, and credential-transition contract.
 
 ## v0.6.0: Recovery and lifecycle
 
-- [ ] Formalize migration compatibility and integrity validation.
-- [ ] Add offline SQLite backup, restore, and recovery tools.
+- [x] Formalize migration compatibility and integrity validation.
+- [x] Add offline SQLite backup, restore, and recovery tools.
 - [ ] Add fake-control-plane end-to-end and release lifecycle coverage.
 
 ## v1.0.0: Stable contract
