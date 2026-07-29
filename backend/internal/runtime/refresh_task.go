@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -32,7 +31,7 @@ type ReconciliationObserver interface {
 }
 
 type RefreshTask struct {
-	mu sync.Mutex
+	refreshLock chan struct{}
 
 	store               SettingsStore
 	timeout             time.Duration
@@ -60,6 +59,7 @@ func NewRefreshTask(
 	}
 
 	return &RefreshTask{
+		refreshLock:         make(chan struct{}, 1),
 		store:               store,
 		timeout:             timeout,
 		retry:               retryConfig,
@@ -71,8 +71,10 @@ func NewRefreshTask(
 	}
 }
 func (r *RefreshTask) Refresh(ctx context.Context) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	if err := r.acquire(ctx); err != nil {
+		return err
+	}
+	defer r.release()
 	r.tracker.Start()
 	r.observe()
 
@@ -117,6 +119,22 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 		Msg("reconciliation completed")
 
 	return nil
+}
+
+func (r *RefreshTask) acquire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case r.refreshLock <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *RefreshTask) release() {
+	<-r.refreshLock
 }
 
 func synchronizeRoutes(

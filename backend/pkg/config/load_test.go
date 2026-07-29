@@ -76,6 +76,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DashboardAuth.RequiredRole != "viewer" {
 		t.Errorf("DashboardAuth.RequiredRole = %q, want viewer", cfg.DashboardAuth.RequiredRole)
 	}
+	if cfg.DashboardAuth.OperatorRole != "operator" {
+		t.Errorf("DashboardAuth.OperatorRole = %q, want operator", cfg.DashboardAuth.OperatorRole)
+	}
 	if cfg.DashboardAuth.DiscoveryTimeout != 5*time.Second {
 		t.Errorf("DashboardAuth.DiscoveryTimeout = %v, want 5s", cfg.DashboardAuth.DiscoveryTimeout)
 	}

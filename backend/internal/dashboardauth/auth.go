@@ -20,6 +20,7 @@ var (
 
 type Authorizer interface {
 	Authorize(context.Context, *http.Request) error
+	AuthorizeOperator(context.Context, *http.Request) error
 }
 
 type verifier interface {
@@ -41,6 +42,7 @@ type oidcAuthorizer struct {
 	verifier     verifier
 	roleClaim    string
 	requiredRole string
+	operatorRole string
 }
 
 // New creates an OIDC authorizer. Provider discovery happens during startup so
@@ -60,10 +62,19 @@ func New(ctx context.Context, cfg config.DashboardAuthConfig) (Authorizer, error
 			client:    client,
 		},
 		requiredRole: cfg.RequiredRole,
+		operatorRole: cfg.OperatorRole,
 	}, nil
 }
 
 func (a *oidcAuthorizer) Authorize(ctx context.Context, request *http.Request) error {
+	return a.authorize(ctx, request, a.requiredRole, a.operatorRole)
+}
+
+func (a *oidcAuthorizer) AuthorizeOperator(ctx context.Context, request *http.Request) error {
+	return a.authorize(ctx, request, a.operatorRole)
+}
+
+func (a *oidcAuthorizer) authorize(ctx context.Context, request *http.Request, requiredRoles ...string) error {
 	token, err := bearerToken(request.Header.Get("Authorization"))
 	if err != nil {
 		return err
@@ -79,7 +90,7 @@ func (a *oidcAuthorizer) Authorize(ctx context.Context, request *http.Request) e
 	if strings.TrimSpace(identity.subject) == "" {
 		return ErrUnauthenticated
 	}
-	if !contains(identity.roles, a.requiredRole) {
+	if !containsAny(identity.roles, requiredRoles) {
 		return ErrForbidden
 	}
 
@@ -126,6 +137,15 @@ func stringSliceClaim(value json.RawMessage) ([]string, bool) {
 func contains(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAny(values []string, targets []string) bool {
+	for _, target := range targets {
+		if contains(values, target) {
 			return true
 		}
 	}

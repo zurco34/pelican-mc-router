@@ -335,7 +335,9 @@ Set `PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED=true` only when an authenticated
 reverse proxy or SSO forwards a verified OpenID Connect ID token as an
 `Authorization: Bearer` header. Configure its HTTPS issuer, the expected
 audience, the array-valued role claim, and the required role (normally
-`viewer`). The service validates provider metadata during startup and fails
+`viewer`). Configure a separate `operator` role for the manual reconciliation
+control.
+The service validates provider metadata during startup and fails
 closed if that check cannot complete.
 
 The application returns generic HTTP `401` for absent or invalid tokens and
@@ -344,8 +346,10 @@ return, or expose token contents, subjects, or roles in metrics. Keep the
 existing private binding or proxy authentication boundary in place; OIDC does
 not make direct public API exposure supported.
 
-No dashboard mutations are available. Future operator actions require a
-separate CSRF, request-serialization, and audit-safe event design. See
+The manual reconciliation control requires the `operator` role and a
+same-origin custom request header; it waits for the existing serialized refresh
+and reports only safe cached reconciliation status. An interrupted request
+cancels its refresh without changing the last-known-good runtime state. See
 [ADR-0006](adr/ADR-0006-dashboard-oidc-authorization.md).
 
 ## Temporary mc-router route file
