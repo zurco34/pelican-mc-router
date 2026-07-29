@@ -104,6 +104,17 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 		r.observe()
 		return nil
 	}
+	if _, productionSynchronizer := r.synchronizer.(*router.Synchronizer); productionSynchronizer {
+		inventory, ok := discoveryService.(*Inventory)
+		if !ok {
+			return fmt.Errorf("refresh inventory: inventory service is unavailable")
+		}
+		if err := inventory.Refresh(ctx); err != nil {
+			r.tracker.CompleteRuntimeBuildFailure()
+			r.observe()
+			return fmt.Errorf("refresh inventory: %w", err)
+		}
+	}
 
 	result := router.ReconciliationResult{}
 	if r.synchronizer != nil {
@@ -234,8 +245,9 @@ func (r *RefreshTask) buildRuntimeServices() (
 		),
 	)
 
+	inventory := NewInventory(discoveryService)
 	routingService, err := router.New(
-		discoveryService,
+		inventory,
 		runtimeSettings.RouterDomain,
 	)
 	if err != nil {
@@ -245,5 +257,5 @@ func (r *RefreshTask) buildRuntimeServices() (
 		)
 	}
 
-	return discoveryService, routingService, nil
+	return inventory, routingService, nil
 }
