@@ -97,7 +97,7 @@ PELICAN_MC_ROUTER_SECRETS_BOOTSTRAP_TOKEN_NAME=bootstrap-token
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.1
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -224,14 +224,17 @@ Pelican MC Router stores its runtime settings in its SQLite database.
 Initial setup requires:
 
 - the Pelican panel URL;
-- a Pelican application API key;
+- a mounted Pelican credential secret file and its bounded name;
 - the base Minecraft routing domain.
 
-Read the API key without placing it directly in shell history:
+Create an owner-readable Pelican credential file and keep its name separate
+from its value:
 
 ```bash
-read -rsp "Pelican API key: " PELICAN_API_KEY
-printf '\n'
+install -d -m 700 ./secrets
+umask 077
+openssl rand -base64 48 > ./secrets/pelican-api-key
+openssl rand -base64 48 > ./secrets/bootstrap-token
 ```
 
 Submit the initial setup:
@@ -243,40 +246,28 @@ curl \
   --silent \
   --request POST \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer $(cat ./secrets/bootstrap-token)" \
   --data-binary @- \
   http://127.0.0.1:8080/api/v1/setup <<EOF
 {
   "pelican_url": "https://panel.example.com",
-  "pelican_api_key": "${PELICAN_API_KEY}",
+  "pelican_secret_name": "pelican-api-key",
   "router_domain": "mc.example.com"
 }
 EOF
 
-unset PELICAN_API_KEY
 ```
 
 A successful request returns HTTP `204 No Content`.
 
-Confirm setup status:
-
-```bash
-curl \
-  --fail \
-  --silent \
-  http://127.0.0.1:8080/api/v1/setup
-```
-
-Expected response:
-
-```json
-{"completed":true}
-```
+After successful setup, `/api/v1/setup` returns `404` permanently. Use an OIDC
+viewer bearer token to query authenticated status instead.
 
 After setup completes, verify observability endpoints:
 
 ```bash
 curl --fail http://127.0.0.1:8080/ready
-curl --fail http://127.0.0.1:8080/api/v1/status
+curl --fail --header "Authorization: Bearer $OIDC_TOKEN" http://127.0.0.1:8080/api/v1/status
 curl --fail http://127.0.0.1:8080/metrics
 ```
 
@@ -374,9 +365,9 @@ service database only while the service is stopped, retain the original until
 startup and integrity verification succeed, and roll back by restoring that
 original backup. `compact` runs SQLite `VACUUM` and likewise requires downtime.
 
-### Optional dashboard OIDC protection
+### Required management OIDC authorization
 
-Set `PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED=true` only when an authenticated
+Set `PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED=true` when an authenticated
 reverse proxy or SSO forwards a verified OpenID Connect ID token as an
 `Authorization: Bearer` header. Configure its HTTPS issuer, the expected
 audience, the array-valued role claim, and the required role (normally
@@ -491,7 +482,7 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.1
 ```
 
 Change the tag to the exact release being installed.
@@ -513,15 +504,15 @@ podman-compose up --detach
 Do not use `--volumes` during an upgrade. The named volume contains the SQLite
 database and application configuration.
 
-No database migration or volume removal is required. Retain the existing named
-volume and do not use `docker compose down --volumes` during an upgrade.
+Take and verify an offline backup before upgrade. Migrations are forward-only;
+retain the existing named volume and do not use `docker compose down --volumes`.
 
 Verify the endpoints after the upgrade:
 
 ```bash
 curl --fail http://127.0.0.1:8080/health
 curl --fail http://127.0.0.1:8080/ready
-curl --fail http://127.0.0.1:8080/api/v1/status
+curl --fail --header "Authorization: Bearer $OIDC_TOKEN" http://127.0.0.1:8080/api/v1/status
 curl --fail http://127.0.0.1:8080/metrics
 ```
 
@@ -532,11 +523,11 @@ Retry after a short wait; if it remains unavailable, use its JSON reason and
 ## Rollback
 
 To roll back, set `PELICAN_MC_ROUTER_IMAGE` to the previously known-good
-release tag, pull it, and recreate the containers. For example, the v0.2.0
-rollback point is `0.1.3`:
+release tag only when that release supports the current schema. Restore the
+verified offline backup when a schema downgrade is unsupported:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.1.3
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.0
 ```
 
 ```bash
@@ -544,6 +535,5 @@ docker compose pull
 docker compose up --detach --no-build
 ```
 
-Retain the named volume and do not use `--volumes`. v0.2.0 does not require a
-database migration. Dashboard OIDC variables are ignored by earlier images;
-the prior private-binding or reverse-proxy access boundary remains required.
+Retain the named volume and do not use `--volumes`. Do not assume an older image
+can open a newer schema; restore an offline backup instead when required.
