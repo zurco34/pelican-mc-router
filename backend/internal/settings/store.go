@@ -86,6 +86,71 @@ func (s *Store) SetSetupComplete(complete bool) error {
 }
 
 func (s *Store) Save(value Settings) error {
+	return s.save(value, false)
+}
+
+// StageSetup records a safe, retryable setup candidate. It intentionally does
+// not make the candidate active or mark setup as complete.
+func (s *Store) StageSetup(value Settings) error {
+	if value.PelicanSecretName == "" {
+		return errors.New("stage pending setup: Pelican secret reference is required")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin pending setup transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`
+		INSERT INTO pending_setup (id, pelican_url, pelican_secret_name, router_domain, updated_at)
+		VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			pelican_url = excluded.pelican_url,
+			pelican_secret_name = excluded.pelican_secret_name,
+			router_domain = excluded.router_domain,
+			updated_at = CURRENT_TIMESTAMP
+	`, value.PelicanURL, value.PelicanSecretName, value.RouterDomain); err != nil {
+		return fmt.Errorf("stage pending setup: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit pending setup transaction: %w", err)
+	}
+	return nil
+}
+
+// PromotePendingSetup atomically makes the staged candidate active and marks
+// setup complete. A caller must activate the candidate runtime before calling
+// this method and publish it only after this method succeeds.
+func (s *Store) PromotePendingSetup() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin pending setup promotion: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var value Settings
+	if err := tx.QueryRow(`
+		SELECT pelican_url, pelican_secret_name, router_domain
+		FROM pending_setup WHERE id = 1
+	`).Scan(&value.PelicanURL, &value.PelicanSecretName, &value.RouterDomain); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("load pending setup: %w", err)
+	}
+	if err := saveValues(tx, value, true); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM pending_setup WHERE id = 1`); err != nil {
+		return fmt.Errorf("clear pending setup: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit pending setup promotion: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) save(value Settings, complete bool) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin settings transaction: %w", err)
@@ -95,6 +160,18 @@ func (s *Store) Save(value Settings) error {
 		_ = tx.Rollback()
 	}()
 
+	if err := saveValues(tx, value, complete); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit settings transaction: %w", err)
+	}
+
+	return nil
+}
+
+func saveValues(writer settingWriter, value Settings, complete bool) error {
 	values := []struct {
 		key   string
 		value string
@@ -108,6 +185,9 @@ func (s *Store) Save(value Settings) error {
 			value: value.RouterDomain,
 		},
 	}
+	if complete {
+		values = append(values, struct{ key, value string }{KeySetupCompleted, strconv.FormatBool(true)})
+	}
 	if value.PelicanSecretName != "" {
 		values = append(values, struct{ key, value string }{KeyPelicanSecretName, value.PelicanSecretName})
 	} else {
@@ -115,20 +195,15 @@ func (s *Store) Save(value Settings) error {
 	}
 
 	for _, setting := range values {
-		if err := setValue(tx, setting.key, setting.value); err != nil {
+		if err := setValue(writer, setting.key, setting.value); err != nil {
 			return fmt.Errorf("save %q: %w", setting.key, err)
 		}
 	}
 	if value.PelicanSecretName != "" {
-		if _, err := tx.Exec(`DELETE FROM settings WHERE key = ?`, KeyPelicanAPIKey); err != nil {
+		if _, err := writer.Exec(`DELETE FROM settings WHERE key = ?`, KeyPelicanAPIKey); err != nil {
 			return fmt.Errorf("remove legacy Pelican credential: %w", err)
 		}
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit settings transaction: %w", err)
-	}
-
 	return nil
 }
 
@@ -167,52 +242,5 @@ func (s *Store) Load() (Settings, error) {
 }
 
 func (s *Store) SaveSetup(value Settings) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin setup settings transaction: %w", err)
-	}
-
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	values := []struct {
-		key   string
-		value string
-	}{
-		{
-			key:   KeyPelicanURL,
-			value: value.PelicanURL,
-		},
-		{
-			key:   KeyRouterDomain,
-			value: value.RouterDomain,
-		},
-		{
-			key:   KeySetupCompleted,
-			value: strconv.FormatBool(true),
-		},
-	}
-	if value.PelicanSecretName != "" {
-		values = append(values, struct{ key, value string }{KeyPelicanSecretName, value.PelicanSecretName})
-	} else {
-		values = append(values, struct{ key, value string }{KeyPelicanAPIKey, value.PelicanAPIKey})
-	}
-
-	for _, setting := range values {
-		if err := setValue(tx, setting.key, setting.value); err != nil {
-			return fmt.Errorf("save %q: %w", setting.key, err)
-		}
-	}
-	if value.PelicanSecretName != "" {
-		if _, err := tx.Exec(`DELETE FROM settings WHERE key = ?`, KeyPelicanAPIKey); err != nil {
-			return fmt.Errorf("remove legacy Pelican credential: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit setup settings transaction: %w", err)
-	}
-
-	return nil
+	return s.save(value, true)
 }

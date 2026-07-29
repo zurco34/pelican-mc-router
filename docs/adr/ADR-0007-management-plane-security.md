@@ -36,7 +36,7 @@ deployment configuration.
 - Setup is bootstrap-only. `GET` and `POST /api/v1/setup` require a bootstrap
   bearer token while the database is uninitialized. After successful setup,
   setup routes are no longer available and do not provide a way to replay or
-  inspect bootstrap state.
+  inspect bootstrap state, including after a process restart.
 
 ### Authentication and proxy boundary
 
@@ -65,6 +65,23 @@ deployment configuration.
   state until a successful file-backed rotation. A successful rotation makes
   the file reference authoritative and removes reliance on the legacy value.
   No endpoint exposes either credential form.
+
+### Setup activation state
+
+- Setup has three states: `uninitialized`, a persisted retryable pending
+  candidate, and `active`. Only active settings carry `setup.completed=true`.
+- After validation, setup stores only the candidate URL, domain, and secret
+  reference in a separate pending record. It builds and reconciles candidate
+  runtime services without publishing them to readers, then atomically
+  promotes the candidate to active settings and publishes those services.
+- A validation, candidate activation, cancellation, or promotion failure leaves
+  active settings and the published runtime unchanged. An initial setup remains
+  bootstrap-retryable; its pending record is safe to retry or replace.
+- A crash before promotion leaves the setup incomplete and retryable. A crash
+  after promotion is recovered by normal startup reconciliation from active
+  settings. Candidate backend changes are reconciled idempotently on retry.
+- This uses an additive migration. Existing configured databases retain their
+  active settings; no downgrade of the resulting schema is promised.
 
 ### Sensitive actions
 

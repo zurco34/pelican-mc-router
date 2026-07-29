@@ -16,17 +16,26 @@ var (
 
 type stubSettingsStore struct {
 	saved            settings.Settings
+	staged           settings.Settings
 	saveErr          error
+	promoteErr       error
 	setupComplete    bool
 	setupCompleteErr error
 }
 
-func (s *stubSettingsStore) SaveSetup(value settings.Settings) error {
+func (s *stubSettingsStore) StageSetup(value settings.Settings) error {
 	if s.saveErr != nil {
 		return s.saveErr
 	}
+	s.staged = value
+	return nil
+}
 
-	s.saved = value
+func (s *stubSettingsStore) PromotePendingSetup() error {
+	if s.promoteErr != nil {
+		return s.promoteErr
+	}
+	s.saved = s.staged
 	return nil
 }
 
@@ -66,6 +75,22 @@ type stubRuntimeRefresher struct {
 	err    error
 }
 
+type stubCandidateActivator struct {
+	prepared  bool
+	published bool
+	err       error
+}
+
+func (s *stubCandidateActivator) Refresh(context.Context) error { return nil }
+
+func (s *stubCandidateActivator) Prepare(context.Context, settings.Settings) (func(), error) {
+	s.prepared = true
+	if s.err != nil {
+		return nil, s.err
+	}
+	return func() { s.published = true }, nil
+}
+
 func (s *stubRuntimeRefresher) Refresh(context.Context) error {
 	s.called = true
 	return s.err
@@ -90,6 +115,35 @@ func TestNewService(t *testing.T) {
 	}
 }
 func TestServiceSetup(t *testing.T) {
+	t.Run("does not persist or publish when candidate activation fails", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		activator := &stubCandidateActivator{err: errRefreshFailed}
+		service := NewService(store, &stubPelicanValidator{}, activator)
+		err := service.Setup(context.Background(), settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"})
+		if !errors.Is(err, errRefreshFailed) {
+			t.Fatalf("Setup() error = %v", err)
+		}
+		if store.saved != (settings.Settings{}) {
+			t.Fatal("candidate failure promoted setup")
+		}
+		if activator.published {
+			t.Fatal("candidate failure published runtime")
+		}
+	})
+	t.Run("promotes only after candidate activation", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		activator := &stubCandidateActivator{}
+		service := NewService(store, &stubPelicanValidator{}, activator)
+		if err := service.Setup(context.Background(), settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"}); err != nil {
+			t.Fatal(err)
+		}
+		if !activator.prepared || !activator.published {
+			t.Fatal("candidate activation was not prepared and published")
+		}
+		if store.saved.RouterDomain == "" {
+			t.Fatal("successful candidate was not persisted")
+		}
+	})
 
 	t.Run("validates and persists normalized settings", func(t *testing.T) {
 		store := &stubSettingsStore{}
@@ -134,10 +188,10 @@ func TestServiceSetup(t *testing.T) {
 			)
 		}
 	})
-	t.Run("refreshes runtime after persisting settings", func(t *testing.T) {
+	t.Run("promotes setup and publishes prepared runtime", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		validator := &stubPelicanValidator{}
-		refresher := &stubRuntimeRefresher{}
+		refresher := &stubCandidateActivator{}
 
 		service := NewService(
 			store,
@@ -154,15 +208,15 @@ func TestServiceSetup(t *testing.T) {
 			t.Fatalf("Setup() error = %v", err)
 		}
 
-		if !refresher.called {
-			t.Fatal("runtime refresher was not called")
+		if !refresher.prepared || !refresher.published {
+			t.Fatal("prepared runtime was not published")
 		}
 	})
 
-	t.Run("returns an error when runtime refresh fails", func(t *testing.T) {
+	t.Run("retains retryable setup when candidate activation fails", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		validator := &stubPelicanValidator{}
-		refresher := &stubRuntimeRefresher{
+		refresher := &stubCandidateActivator{
 			err: errRefreshFailed,
 		}
 
@@ -184,15 +238,18 @@ func TestServiceSetup(t *testing.T) {
 			)
 		}
 
-		if store.saved == (settings.Settings{}) {
-			t.Fatal("settings were not persisted before runtime refresh")
+		if store.saved != (settings.Settings{}) {
+			t.Fatal("failed first refresh promoted setup")
+		}
+		if store.staged == (settings.Settings{}) {
+			t.Fatal("failed first refresh did not retain retryable pending setup")
 		}
 	})
 
 	t.Run("updates settings and refreshes runtime", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		validator := &stubPelicanValidator{}
-		refresher := &stubRuntimeRefresher{}
+		refresher := &stubCandidateActivator{}
 
 		service := NewService(
 			store,
@@ -223,8 +280,8 @@ func TestServiceSetup(t *testing.T) {
 			)
 		}
 
-		if !refresher.called {
-			t.Fatal("runtime refresher was not called")
+		if !refresher.prepared || !refresher.published {
+			t.Fatal("prepared runtime was not published")
 		}
 	})
 
