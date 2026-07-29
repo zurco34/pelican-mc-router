@@ -43,4 +43,4 @@ endpoint, trust-boundary, bootstrap, and credential-transition contract.
 
 - [x] Publish an OpenAPI contract and compatibility/deprecation policy.
 - [x] Declare supported topology, database guarantees, and security model.
-- [ ] Complete threat-model, performance, and lifecycle evidence.
+- [x] Complete threat-model, performance, and lifecycle evidence.
