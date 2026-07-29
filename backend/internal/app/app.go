@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/rs/zerolog/log"
+	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
@@ -113,7 +114,11 @@ func Run(ctx context.Context) error {
 		reconciliationTracker,
 		observability.NewHandler(metricsRegistry),
 		buildinfo.Current(),
-	).Router()
+	).WithDashboard(dashboard.NewService(
+		setupService,
+		reconciliationTracker,
+		buildinfo.Current(),
+	)).Router()
 
 	address := serverAddress(cfg.Server)
 

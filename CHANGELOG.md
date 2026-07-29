@@ -7,6 +7,12 @@ API behavior, and deployment details may change between minor releases.
 
 ## Unreleased
 
+### Added
+
+- A same-origin, read-only `/dashboard` page for cached operational status. It
+  does not trigger reconciliation and must remain private or protected by an
+  authenticated reverse proxy.
+
 ## 0.1.3
 
 ### Added

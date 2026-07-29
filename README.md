@@ -15,7 +15,7 @@ backend.
 - Optional Infrared configuration generation
 - Deterministic and convergent route reconciliation
 - Docker-first deployment model
-- REST API and a planned read-only dashboard under development
+- REST API and a same-origin read-only operations dashboard
 
 ## Supported routing backends
 
@@ -118,6 +118,9 @@ Only one routing backend is active for a deployment.
 	sanitized error summary, and bounded route diagnostics (`desired`, `created`,
 	`updated`, `deleted`, and `changed`).
   It does not trigger discovery or backend work.
+- `GET /dashboard` renders the same cached operational state for browser use.
+  It is read-only, does not trigger reconciliation, and must be kept private or
+  behind authenticated reverse-proxy access control.
 - `GET /metrics` exposes Prometheus text metrics. It includes standard Go and
   process collectors plus these reconciliation metrics:
   - Counter: `pelican_mc_router_reconciliation_total{result}` with fixed result
