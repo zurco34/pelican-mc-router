@@ -105,6 +105,18 @@ Selected backend adapter
 
 Only one routing backend is active for a deployment.
 
+## Health and status endpoints
+
+- `GET /health` is process liveness and returns plain-text `OK`. Docker
+  liveness checks continue to use this endpoint.
+- `GET /ready` is readiness and returns JSON. It is ready only after setup and
+  the latest completed configured reconciliation has succeeded. A reconciliation
+  failure makes it not ready until a later reconciliation succeeds.
+- `GET /api/v1/status` returns the setup state, readiness result and reason,
+  plus cached reconciliation fields: `in_progress`, completed outcome and
+  timestamps, duration, consecutive failures, and a sanitized error summary.
+  It does not trigger discovery or backend work.
+
 ## Deployment
 
 The production-oriented Docker Compose stack includes Pelican MC Router,

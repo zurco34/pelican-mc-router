@@ -29,6 +29,7 @@ type RefreshTask struct {
 	wildcardBackendHost string
 	manager             *Manager
 	synchronizer        RouteSynchronizer
+	tracker             *ReconciliationTracker
 }
 
 func NewRefreshTask(
@@ -37,6 +38,7 @@ func NewRefreshTask(
 	wildcardBackendHost string,
 	manager *Manager,
 	synchronizer RouteSynchronizer,
+	tracker *ReconciliationTracker,
 ) *RefreshTask {
 	return &RefreshTask{
 		store:               store,
@@ -44,19 +46,28 @@ func NewRefreshTask(
 		wildcardBackendHost: wildcardBackendHost,
 		manager:             manager,
 		synchronizer:        synchronizer,
+		tracker:             tracker,
 	}
 }
 func (r *RefreshTask) Refresh(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.tracker.Start()
 
 	discoveryService, routingService, err := r.buildRuntimeServices()
 	if err != nil {
+		r.tracker.CompleteRuntimeBuildFailure()
 		return fmt.Errorf("build runtime services: %w", err)
 	}
+	if routingService == nil {
+		r.manager.Set(nil, nil)
+		r.tracker.CompleteNotConfigured()
+		return nil
+	}
 
-	if routingService != nil && r.synchronizer != nil {
+	if r.synchronizer != nil {
 		if err := r.synchronizer.Sync(ctx, routingService); err != nil {
+			r.tracker.CompleteRouteSynchronizationFailure()
 			return fmt.Errorf(
 				"synchronize routes: %w",
 				err,
@@ -68,8 +79,13 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 		discoveryService,
 		routingService,
 	)
+	r.tracker.CompleteSuccess()
 
 	return nil
+}
+
+func (r *RefreshTask) ReconciliationTracker() *ReconciliationTracker {
+	return r.tracker
 }
 
 func (r *RefreshTask) Run(ctx context.Context) error {

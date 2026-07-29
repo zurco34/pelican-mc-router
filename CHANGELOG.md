@@ -5,6 +5,13 @@ All notable changes to Pelican MC Router are documented in this file.
 The project follows Semantic Versioning. Until version `1.0.0`, configuration,
 API behavior, and deployment details may change between minor releases.
 
+## Unreleased
+
+### Added
+
+- Add cached reconciliation status tracking and the `/api/v1/status` and
+  `/ready` observability endpoints.
+
 ## 0.1.1
 
 Patch release fixing Pelican wildcard allocation routing.
