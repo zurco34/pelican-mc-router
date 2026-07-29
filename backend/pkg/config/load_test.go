@@ -82,6 +82,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DashboardAuth.DiscoveryTimeout != 5*time.Second {
 		t.Errorf("DashboardAuth.DiscoveryTimeout = %v, want 5s", cfg.DashboardAuth.DiscoveryTimeout)
 	}
+	if cfg.Secrets.Directory != "/run/secrets/pelican-mc-router" {
+		t.Errorf("Secrets.Directory = %q, want default", cfg.Secrets.Directory)
+	}
+	if cfg.Secrets.BootstrapTokenName != "bootstrap-token" {
+		t.Errorf("Secrets.BootstrapTokenName = %q, want default", cfg.Secrets.BootstrapTokenName)
+	}
 
 	if cfg.Database.Path != "./data/pelican-mc-router.db" {
 		t.Errorf(

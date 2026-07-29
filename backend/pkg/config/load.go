@@ -59,6 +59,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("retry.attempts", 3)
 	v.SetDefault("retry.initial_backoff", 200*time.Millisecond)
 	v.SetDefault("retry.max_backoff", 2*time.Second)
+	v.SetDefault("secrets.directory", "/run/secrets/pelican-mc-router")
+	v.SetDefault("secrets.bootstrap_token_name", "bootstrap-token")
 
 	v.SetDefault("dashboard_auth.enabled", false)
 	v.SetDefault("dashboard_auth.role_claim", "roles")

@@ -59,6 +59,8 @@ services:
       PELICAN_MC_ROUTER_RETRY_ATTEMPTS: "${PELICAN_MC_ROUTER_RETRY_ATTEMPTS:-3}"
       PELICAN_MC_ROUTER_RETRY_INITIAL_BACKOFF: "${PELICAN_MC_ROUTER_RETRY_INITIAL_BACKOFF:-200ms}"
       PELICAN_MC_ROUTER_RETRY_MAX_BACKOFF: "${PELICAN_MC_ROUTER_RETRY_MAX_BACKOFF:-2s}"
+      PELICAN_MC_ROUTER_SECRETS_DIRECTORY: "/run/secrets/pelican-mc-router"
+      PELICAN_MC_ROUTER_SECRETS_BOOTSTRAP_TOKEN_NAME: "${PELICAN_MC_ROUTER_SECRETS_BOOTSTRAP_TOKEN_NAME:-bootstrap-token}"
       PELICAN_MC_ROUTER_DATABASE_PATH: "/app/data/pelican-mc-router.db"
 
       PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST: "${PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST:-}"
@@ -76,6 +78,10 @@ services:
 
     volumes:
       - pelican-mc-router-data:/app/data
+      - type: bind
+        source: "${PELICAN_MC_ROUTER_SECRETS_HOST_DIR:-./secrets}"
+        target: /run/secrets/pelican-mc-router
+        read_only: true
 
     networks:
       - router-control

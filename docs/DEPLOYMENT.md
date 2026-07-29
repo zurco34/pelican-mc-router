@@ -88,6 +88,11 @@ PELICAN_MC_ROUTER_RETRY_ATTEMPTS=3
 PELICAN_MC_ROUTER_RETRY_INITIAL_BACKOFF=200ms
 PELICAN_MC_ROUTER_RETRY_MAX_BACKOFF=2s
 
+# Directory mounted read-only at /run/secrets/pelican-mc-router.
+# Keep files owner-readable only; do not store secret values in .env.
+PELICAN_MC_ROUTER_SECRETS_HOST_DIR=./secrets
+PELICAN_MC_ROUTER_SECRETS_BOOTSTRAP_TOKEN_NAME=bootstrap-token
+
 # Required when Pelican allocations use 0.0.0.0 or ::.
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
@@ -96,6 +101,20 @@ PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:0.2.0
 ```
 
 The `.env` file is ignored by Git and must not be committed.
+
+## Mounted secret files
+
+The Compose service mounts `PELICAN_MC_ROUTER_SECRETS_HOST_DIR` read-only at
+`/run/secrets/pelican-mc-router`. Create the host directory with restrictive
+permissions before starting the stack, and ensure the container's unprivileged
+UID (`10001`) can read its files without making them group- or world-readable.
+The application accepts only regular, owner-readable files with bounded names
+from this directory; it refuses paths, symlinks, group-readable files, and
+world-readable files.
+
+This mount is preparatory until the secure management-plane release uses it for
+the one-time bootstrap token and file-backed Pelican credential references. Do
+not put a token or API key in `.env`, logs, or shell history.
 
 Keep `PELICAN_MC_ROUTER_IMAGE` pinned to an exact release version in production.
 This makes upgrades explicit and prevents an unrelated moving tag from changing
