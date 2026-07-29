@@ -152,7 +152,7 @@ Versioned multi-platform container images are published to:
 ghcr.io/zurco34/pelican-mc-router
 ```
 
-For the prepared `v0.1.3` release configuration, create the environment file
+For the prepared `v0.2.0` release configuration, create the environment file
 and start the pinned production images after the image is published:
 
 ```bash

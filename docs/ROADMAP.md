@@ -7,7 +7,7 @@
 
 # v0.2
 
-- [ ] Dashboard
+- [x] Dashboard
 - [ ] Logs
 - [ ] Aliases
 

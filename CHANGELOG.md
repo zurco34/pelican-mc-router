@@ -5,7 +5,7 @@ All notable changes to Pelican MC Router are documented in this file.
 The project follows Semantic Versioning. Until version `1.0.0`, configuration,
 API behavior, and deployment details may change between minor releases.
 
-## Unreleased
+## 0.2.0 - 2026-07-29
 
 ### Added
 
@@ -17,6 +17,20 @@ API behavior, and deployment details may change between minor releases.
   identity data is never exposed.
 - An OIDC-operator-authorized manual reconciliation action. It uses the
   existing serialized refresh path and returns only safe cached status.
+
+### Security
+
+- Dashboard OIDC protection is opt-in. When enabled, dashboard access requires
+  a verified issuer, audience, and role; the manual reconciliation action also
+  requires the configured `operator` role and a same-origin request header.
+
+### Upgrade notes
+
+- Dashboard OIDC settings are optional and default to disabled. Existing
+  private, read-only dashboard deployments continue to work without them.
+- Reconciliation and Prometheus metric history remain process-local. After an
+  upgrade or restart, startup reconciliation repopulates current status while
+  counters and histogram history start again from zero.
 
 ## 0.1.3
 
