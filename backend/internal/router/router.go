@@ -35,7 +35,7 @@ type Route struct {
 
 type Service struct {
 	discovery DiscoveryService
-	domain    string
+	planner   *Planner
 }
 
 func New(
@@ -46,14 +46,14 @@ func New(
 		return nil, errNilDiscoveryService
 	}
 
-	domain = normalizeDomain(domain)
-	if domain == "" {
-		return nil, errEmptyDomain
+	planner, err := NewPlanner(domain)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Service{
 		discovery: discovery,
-		domain:    domain,
+		planner:   planner,
 	}, nil
 }
 
@@ -65,46 +65,10 @@ func (s *Service) Routes(
 		return nil, fmt.Errorf("discover Minecraft servers: %w", err)
 	}
 
-	routes := make([]Route, 0, len(servers))
-
-	for _, server := range servers {
-		if server.Suspended {
-			continue
-		}
-
-		hostname := buildHostname(server, s.domain)
-		if hostname == "" {
-			return nil, fmt.Errorf(
-				"build hostname for server %q",
-				server.Name,
-			)
-		}
-
-		if server.BackendIP == "" {
-			return nil, fmt.Errorf(
-				"server %q has an empty backend IP",
-				server.Name,
-			)
-		}
-
-		if server.BackendPort <= 0 {
-			return nil, fmt.Errorf(
-				"server %q has invalid backend port %d",
-				server.Name,
-				server.BackendPort,
-			)
-		}
-
-		routes = append(routes, Route{
-			ServerID: server.Identifier,
-			Hostname: hostname,
-			Backend: Backend{
-				Host: server.BackendIP,
-				Port: server.BackendPort,
-			},
-		})
+	routes, err := s.planner.Plan(servers, nil)
+	if err != nil {
+		return nil, fmt.Errorf("plan routes: %w", err)
 	}
-
 	return routes, nil
 }
 

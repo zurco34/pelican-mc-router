@@ -58,12 +58,14 @@ func TestServiceRoutesGeneratesRoutes(t *testing.T) {
 	discovery := &fakeDiscoveryService{
 		servers: []models.MinecraftServer{
 			{
+				UUID:        "uuid-vanilla",
 				Identifier:  "vanilla",
 				Name:        "Vanilla Survival",
 				BackendIP:   "192.168.1.10",
 				BackendPort: 25565,
 			},
 			{
+				UUID:        "uuid-atm10",
 				Identifier:  "atm10",
 				Name:        "All The Mods 10",
 				BackendIP:   "192.168.1.11",
@@ -96,11 +98,11 @@ func TestServiceRoutesGeneratesRoutes(t *testing.T) {
 		)
 	}
 
-	if routes[0].ServerID != "vanilla" {
+	if routes[0].ServerID != "uuid-vanilla" {
 		t.Errorf(
 			"first ServerID = %q, want %q",
 			routes[0].ServerID,
-			"vanilla",
+			"uuid-vanilla",
 		)
 	}
 
@@ -139,12 +141,14 @@ func TestServiceRoutesSkipsSuspendedServers(t *testing.T) {
 	discovery := &fakeDiscoveryService{
 		servers: []models.MinecraftServer{
 			{
+				UUID:        "uuid-active",
 				Identifier:  "active",
 				Name:        "Active",
 				BackendIP:   "192.168.1.10",
 				BackendPort: 25565,
 			},
 			{
+				UUID:        "uuid-suspended",
 				Identifier:  "suspended",
 				Name:        "Suspended",
 				BackendIP:   "192.168.1.11",
@@ -171,11 +175,11 @@ func TestServiceRoutesSkipsSuspendedServers(t *testing.T) {
 		)
 	}
 
-	if routes[0].ServerID != "active" {
+	if routes[0].ServerID != "uuid-active" {
 		t.Errorf(
 			"ServerID = %q, want %q",
 			routes[0].ServerID,
-			"active",
+			"uuid-active",
 		)
 	}
 }
@@ -186,6 +190,7 @@ func TestServiceRoutesUsesIdentifierAsHostnameFallback(
 	discovery := &fakeDiscoveryService{
 		servers: []models.MinecraftServer{
 			{
+				UUID:        "uuid-server-123",
 				Identifier:  "server-123",
 				Name:        "!!!",
 				BackendIP:   "192.168.1.10",
@@ -250,6 +255,7 @@ func TestServiceRoutesRejectsEmptyBackendIP(t *testing.T) {
 	discovery := &fakeDiscoveryService{
 		servers: []models.MinecraftServer{
 			{
+				UUID:        "uuid-vanilla",
 				Identifier:  "vanilla",
 				Name:        "Vanilla",
 				BackendPort: 25565,
@@ -272,6 +278,7 @@ func TestServiceRoutesRejectsInvalidBackendPort(t *testing.T) {
 	discovery := &fakeDiscoveryService{
 		servers: []models.MinecraftServer{
 			{
+				UUID:       "uuid-vanilla",
 				Identifier: "vanilla",
 				Name:       "Vanilla",
 				BackendIP:  "192.168.1.10",
