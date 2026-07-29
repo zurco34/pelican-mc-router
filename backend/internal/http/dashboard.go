@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 )
@@ -71,6 +72,9 @@ type manualReconcileResponse struct {
 func (s *Server) reconcileDashboard(w http.ResponseWriter, r *http.Request) {
 	if s.dashboardRefresh == nil || s.dashboardAuth == nil {
 		http.NotFound(w, r)
+		return
+	}
+	if !s.allowAction(w, actioncontrol.ActionReconcile) {
 		return
 	}
 	if r.Header.Get(dashboardCSRFHeader) != "1" {

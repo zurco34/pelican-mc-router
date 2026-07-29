@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/bootstrap"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
@@ -121,7 +123,7 @@ func Run(ctx context.Context) error {
 		setupService,
 		reconciliationTracker,
 		buildinfo.Current(),
-	))
+	)).WithActionLimiter(actioncontrol.New(time.Second))
 	setupComplete, err := settingsStore.IsSetupComplete()
 	if err != nil {
 		return fmt.Errorf("determine setup status: %w", err)

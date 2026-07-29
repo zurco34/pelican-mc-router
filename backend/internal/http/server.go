@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -63,6 +64,20 @@ type Server struct {
 	bootstrapAuth        BootstrapAuthorizer
 	managementAuth       DashboardAuthorizer
 	managementAuthSet    bool
+	actionLimiter        *actioncontrol.Limiter
+}
+
+func (s *Server) WithActionLimiter(limiter *actioncontrol.Limiter) *Server {
+	s.actionLimiter = limiter
+	return s
+}
+
+func (s *Server) allowAction(w http.ResponseWriter, action actioncontrol.Action) bool {
+	if s.actionLimiter == nil || s.actionLimiter.Allow(action, time.Now()) {
+		return true
+	}
+	writeJSONError(w, http.StatusTooManyRequests, "action temporarily unavailable")
+	return false
 }
 
 func NewServer(
@@ -417,6 +432,9 @@ func (s *Server) configureSetup(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	if !s.allowAction(w, actioncontrol.ActionSetup) {
+		return
+	}
 	var request setupRequest
 
 	decoder := json.NewDecoder(
@@ -475,6 +493,9 @@ func (s *Server) updateSettings(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	if !s.allowAction(w, actioncontrol.ActionSettings) {
+		return
+	}
 	var request setupRequest
 
 	decoder := json.NewDecoder(
