@@ -61,6 +61,8 @@ type Server struct {
 	dashboardAuth        DashboardAuthorizer
 	dashboardRefresh     DashboardRefresher
 	bootstrapAuth        BootstrapAuthorizer
+	managementAuth       DashboardAuthorizer
+	managementAuthSet    bool
 }
 
 func NewServer(
@@ -90,14 +92,14 @@ func (s *Server) Router() http.Handler {
 	router.Get("/health", healthHandler)
 	router.Get("/metrics", s.metrics.ServeHTTP)
 	router.Get("/ready", s.ready)
-	router.Get("/api/v1/status", s.status)
-	router.Get("/dashboard", s.dashboardPage)
-	router.Post("/api/v1/dashboard/reconcile", s.reconcileDashboard)
-	router.Get("/api/v1/servers", s.listServers)
-	router.Get("/api/v1/routes", s.listRoutes)
+	router.Get("/api/v1/status", s.managementViewer(s.status))
+	router.Get("/dashboard", s.managementViewer(s.dashboardPage))
+	router.Post("/api/v1/dashboard/reconcile", s.managementOperator(s.reconcileDashboard))
+	router.Get("/api/v1/servers", s.managementViewer(s.listServers))
+	router.Get("/api/v1/routes", s.managementViewer(s.listRoutes))
 	router.Get("/api/v1/setup", s.bootstrapOnly(s.getSetupStatus))
 	router.Post("/api/v1/setup", s.bootstrapOnly(s.configureSetup))
-	router.Put("/api/v1/settings", s.updateSettings)
+	router.Put("/api/v1/settings", s.managementOperator(s.updateSettings))
 
 	return router
 }
@@ -138,6 +140,46 @@ func (s *Server) WithDashboard(service DashboardService) *Server {
 func (s *Server) WithDashboardAuthorization(authorizer DashboardAuthorizer) *Server {
 	s.dashboardAuth = authorizer
 	return s
+}
+
+// WithManagementAuthorization enables the v0.3 management-plane policy.
+// A nil authorizer deliberately leaves management routes unavailable.
+func (s *Server) WithManagementAuthorization(authorizer DashboardAuthorizer) *Server {
+	s.managementAuth = authorizer
+	s.managementAuthSet = true
+	return s
+}
+
+func (s *Server) managementViewer(next http.HandlerFunc) http.HandlerFunc {
+	return s.managementAuthorize(next, false)
+}
+
+func (s *Server) managementOperator(next http.HandlerFunc) http.HandlerFunc {
+	return s.managementAuthorize(next, true)
+}
+
+func (s *Server) managementAuthorize(next http.HandlerFunc, operator bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.managementAuthSet {
+			next(w, r)
+			return
+		}
+		if s.managementAuth == nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "management authentication unavailable")
+			return
+		}
+		var err error
+		if operator {
+			err = s.managementAuth.AuthorizeOperator(r.Context(), r)
+		} else {
+			err = s.managementAuth.Authorize(r.Context(), r)
+		}
+		if err != nil {
+			dashboardAuthorizationError(w, err)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Server) WithDashboardActions(refresher DashboardRefresher) *Server {
