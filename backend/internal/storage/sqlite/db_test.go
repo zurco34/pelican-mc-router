@@ -158,3 +158,24 @@ func TestMigrateCreatesSettingsTable(t *testing.T) {
 		t.Fatalf("table name = %q, want %q", tableName, "settings")
 	}
 }
+
+func TestMigrateRecordsMigrationChecksums(t *testing.T) {
+	db, err := Open(Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var checksum string
+	if err := db.QueryRow(`SELECT checksum FROM schema_migrations WHERE version = ?`, "0001_initial.sql").Scan(&checksum); err != nil {
+		t.Fatalf("query checksum: %v", err)
+	}
+	if checksum == "" {
+		t.Fatal("migration checksum is empty")
+	}
+	if _, err := db.Exec(`UPDATE schema_migrations SET checksum = 'changed' WHERE version = ?`, "0001_initial.sql"); err != nil {
+		t.Fatalf("change checksum: %v", err)
+	}
+	if err := Migrate(db); err == nil {
+		t.Fatal("Migrate() error = nil, want checksum mismatch")
+	}
+}
