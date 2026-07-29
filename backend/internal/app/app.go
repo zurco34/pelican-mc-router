@@ -16,6 +16,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
+	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
 	"github.com/zurco34/pelican-mc-router/internal/retry"
 	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
@@ -49,6 +50,7 @@ func Run(ctx context.Context) error {
 
 	settingsStore := settings.NewStore(db)
 	routePolicyStore := routepolicy.NewStore(db)
+	historyStore := operationalhistory.NewStore(db)
 	secretReader, err := secretfile.New(cfg.Secrets.Directory)
 	if err != nil {
 		return fmt.Errorf("create secret reader: %w", err)
@@ -99,6 +101,7 @@ func Run(ctx context.Context) error {
 		reconciliationMetrics,
 		toRetryConfig(cfg.Retry),
 	).WithSecretResolver(runtime.SecretResolverFunc(secretReader.Read))
+	refresher.WithReconciliationEventRecorder(operationalhistory.NewReconciliationRecorder(historyStore))
 	refresher.WithPolicySource(routePolicyStore)
 
 	setupService := setup.NewService(

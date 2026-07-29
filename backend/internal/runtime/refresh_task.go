@@ -38,6 +38,12 @@ type ReconciliationObserver interface {
 	ObserveReconciliation(ReconciliationStatus)
 }
 
+// ReconciliationEventRecorder persists an allowlisted reconciliation outcome.
+// Implementations must not retain errors, route identities, or other topology.
+type ReconciliationEventRecorder interface {
+	RecordReconciliation(context.Context, ReconciliationOutcome, router.ReconciliationResult) error
+}
+
 type RefreshTask struct {
 	refreshLock chan struct{}
 
@@ -49,6 +55,7 @@ type RefreshTask struct {
 	synchronizer        RouteSynchronizer
 	tracker             *ReconciliationTracker
 	observer            ReconciliationObserver
+	recorder            ReconciliationEventRecorder
 	secretResolver      SecretResolver
 	policySource        router.PolicySource
 }
@@ -60,6 +67,11 @@ func (r *RefreshTask) WithPolicySource(source router.PolicySource) *RefreshTask 
 
 func (r *RefreshTask) WithSecretResolver(resolver SecretResolver) *RefreshTask {
 	r.secretResolver = resolver
+	return r
+}
+
+func (r *RefreshTask) WithReconciliationEventRecorder(recorder ReconciliationEventRecorder) *RefreshTask {
+	r.recorder = recorder
 	return r
 }
 
@@ -102,12 +114,14 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 	if err != nil {
 		r.tracker.CompleteRuntimeBuildFailure()
 		r.observe()
+		r.record(ctx)
 		return fmt.Errorf("build runtime services: %w", err)
 	}
 	if routingService == nil {
 		r.manager.Set(nil, nil)
 		r.tracker.CompleteNotConfigured()
 		r.observe()
+		r.record(ctx)
 		return nil
 	}
 	if _, productionSynchronizer := r.synchronizer.(*router.Synchronizer); productionSynchronizer {
@@ -118,6 +132,7 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 		if err := inventory.Refresh(ctx); err != nil {
 			r.tracker.CompleteRuntimeBuildFailure()
 			r.observe()
+			r.record(ctx)
 			return fmt.Errorf("refresh inventory: %w", err)
 		}
 	}
@@ -128,6 +143,7 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 		if err != nil {
 			r.tracker.CompleteRouteSynchronizationFailure(result)
 			r.observe()
+			r.record(ctx)
 			return fmt.Errorf(
 				"synchronize routes: %w",
 				err,
@@ -141,6 +157,7 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 	)
 	r.tracker.CompleteSuccess(result)
 	r.observe()
+	r.record(ctx)
 	log.Info().
 		Int("desired_routes", result.Desired).
 		Int("created_routes", result.Created).
@@ -184,6 +201,20 @@ func synchronizeRoutes(
 func (r *RefreshTask) observe() {
 	if r.observer != nil {
 		r.observer.ObserveReconciliation(r.tracker.Snapshot())
+	}
+}
+
+func (r *RefreshTask) record(ctx context.Context) {
+	if r.recorder == nil {
+		return
+	}
+
+	status := r.tracker.Snapshot()
+	if status.LastOutcome == nil || status.InProgress {
+		return
+	}
+	if err := r.recorder.RecordReconciliation(ctx, *status.LastOutcome, status.RouteChanges); err != nil {
+		log.Warn().Msg("record reconciliation history failed")
 	}
 }
 

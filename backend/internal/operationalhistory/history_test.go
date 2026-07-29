@@ -7,8 +7,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zurco34/pelican-mc-router/internal/router"
+	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
 )
+
+func TestReconciliationRecorderRecordsOnlyAllowlistedFacts(t *testing.T) {
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store := NewStore(db)
+	recorder := NewReconciliationRecorder(store)
+	if err := recorder.RecordReconciliation(context.Background(), runtime.ReconciliationOutcomeSuccess, router.ReconciliationResult{Desired: 4, Created: 1, Updated: 2, Deleted: 1, Changed: true}); err != nil {
+		t.Fatalf("RecordReconciliation() error = %v", err)
+	}
+	events, err := store.List(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	if got, want := events[0], (Event{ID: events[0].ID, OccurredAt: events[0].OccurredAt, Kind: KindReconciliation, Outcome: OutcomeSuccess, Desired: 4, Created: 1, Updated: 2, Deleted: 1, Changed: true}); got != want {
+		t.Fatalf("event = %+v, want %+v", got, want)
+	}
+	if err := recorder.RecordReconciliation(context.Background(), runtime.ReconciliationOutcome("unexpected"), router.ReconciliationResult{}); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("RecordReconciliation() error = %v, want ErrInvalidEvent", err)
+	}
+}
 
 func TestStoreAppendsListsAndPrunesAllowlistedEvents(t *testing.T) {
 	t.Parallel()
