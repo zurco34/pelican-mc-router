@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/router/infrared"
 	"github.com/zurco34/pelican-mc-router/internal/router/mcrouter"
@@ -25,6 +26,11 @@ func newRouteController(
 		client, err := mcrouter.NewClient(
 			mcrouter.ClientConfig{
 				BaseURL: cfg.MCRouter.APIURL,
+				Retry: retry.Config{
+					Attempts:       cfg.Retry.Attempts,
+					InitialBackoff: cfg.Retry.InitialBackoff,
+					MaxBackoff:     cfg.Retry.MaxBackoff,
+				},
 			},
 		)
 		if err != nil {

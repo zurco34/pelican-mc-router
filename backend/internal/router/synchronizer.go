@@ -43,12 +43,20 @@ func (s *Synchronizer) Sync(
 	ctx context.Context,
 	source RouteSource,
 ) error {
+	_, err := s.SyncWithResult(ctx, source)
+	return err
+}
+
+func (s *Synchronizer) SyncWithResult(
+	ctx context.Context,
+	source RouteSource,
+) (ReconciliationResult, error) {
 	if source == nil {
-		return ErrRouteSourceRequired
+		return ReconciliationResult{}, ErrRouteSourceRequired
 	}
 
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf(
+		return ReconciliationResult{}, fmt.Errorf(
 			"router: synchronize routes: %w",
 			err,
 		)
@@ -56,25 +64,33 @@ func (s *Synchronizer) Sync(
 
 	routes, err := source.Routes(ctx)
 	if err != nil {
-		return fmt.Errorf(
+		return ReconciliationResult{}, fmt.Errorf(
 			"router: generate routes: %w",
 			err,
 		)
 	}
 
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf(
+		return ReconciliationResult{}, fmt.Errorf(
 			"router: synchronize routes: %w",
 			err,
 		)
 	}
 
+	if controller, ok := s.controller.(DiagnosticsRouteController); ok {
+		result, err := controller.ReconcileWithResult(ctx, routes)
+		if err != nil {
+			return result, fmt.Errorf("router: reconcile routes: %w", err)
+		}
+		return result, nil
+	}
+
 	if err := s.controller.Reconcile(ctx, routes); err != nil {
-		return fmt.Errorf(
+		return ReconciliationResult{Desired: len(routes)}, fmt.Errorf(
 			"router: reconcile routes: %w",
 			err,
 		)
 	}
 
-	return nil
+	return ReconciliationResult{Desired: len(routes)}, nil
 }

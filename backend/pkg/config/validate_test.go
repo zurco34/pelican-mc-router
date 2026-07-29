@@ -9,8 +9,12 @@ import (
 func TestConfigValidateInfrastructure(t *testing.T) {
 	cfg := Config{
 		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
+			Host:              "0.0.0.0",
+			Port:              8080,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       time.Minute,
 		},
 		Database: DatabaseConfig{
 			Path: "./data/pelican-mc-router.db",
@@ -18,6 +22,7 @@ func TestConfigValidateInfrastructure(t *testing.T) {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -36,8 +41,12 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 ) {
 	cfg := Config{
 		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
+			Host:              "0.0.0.0",
+			Port:              8080,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       time.Minute,
 		},
 		Database: DatabaseConfig{
 			Path: "./data/pelican-mc-router.db",
@@ -45,6 +54,7 @@ func TestConfigValidateInfrastructureDoesNotRequireSetupSettings(
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
 		Infrared: InfraredConfig{
 			ProxiesPath:      "/etc/infrared/proxies",
 			ReloadMarkerPath: "/etc/infrared/control/infrared.reload",
@@ -117,6 +127,42 @@ func TestConfigValidate(t *testing.T) {
 				return cfg
 			}(),
 			wantErr: ErrInvalidServerPort,
+		},
+		{
+			name: "invalid server read header timeout",
+			cfg: func() Config {
+				cfg := validConfig()
+				cfg.Server.ReadHeaderTimeout = 0
+				return cfg
+			}(),
+			wantErr: ErrInvalidServerReadHeaderTimeout,
+		},
+		{
+			name: "invalid server read timeout",
+			cfg: func() Config {
+				cfg := validConfig()
+				cfg.Server.ReadTimeout = 0
+				return cfg
+			}(),
+			wantErr: ErrInvalidServerReadTimeout,
+		},
+		{
+			name: "invalid server write timeout",
+			cfg: func() Config {
+				cfg := validConfig()
+				cfg.Server.WriteTimeout = 0
+				return cfg
+			}(),
+			wantErr: ErrInvalidServerWriteTimeout,
+		},
+		{
+			name: "invalid server idle timeout",
+			cfg: func() Config {
+				cfg := validConfig()
+				cfg.Server.IdleTimeout = 0
+				return cfg
+			}(),
+			wantErr: ErrInvalidServerIdleTimeout,
 		},
 
 		{
@@ -246,8 +292,12 @@ func TestConfigValidateReturnsMultipleErrors(t *testing.T) {
 func validConfig() Config {
 	return Config{
 		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
+			Host:              "0.0.0.0",
+			Port:              8080,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       time.Minute,
 		},
 		Database: DatabaseConfig{
 			Path: "./data/pelican-mc-router.db",
@@ -260,6 +310,7 @@ func validConfig() Config {
 		Discovery: DiscoveryConfig{
 			Interval: 30 * time.Second,
 		},
+		Retry: RetryConfig{Attempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Second},
 		Router: RouterConfig{
 			Backend: "infrared",
 			Domain:  "mc.example.com",

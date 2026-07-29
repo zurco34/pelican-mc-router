@@ -77,6 +77,17 @@ MINECRAFT_PORT=25565
 PELICAN_MC_ROUTER_BIND_ADDRESS=127.0.0.1
 PELICAN_MC_ROUTER_HTTP_PORT=8080
 
+# Inbound HTTP API timeouts.
+PELICAN_MC_ROUTER_SERVER_READ_HEADER_TIMEOUT=5s
+PELICAN_MC_ROUTER_SERVER_READ_TIMEOUT=15s
+PELICAN_MC_ROUTER_SERVER_WRITE_TIMEOUT=30s
+PELICAN_MC_ROUTER_SERVER_IDLE_TIMEOUT=1m
+
+# Bounded retries for transient Pelican and mc-router read failures.
+PELICAN_MC_ROUTER_RETRY_ATTEMPTS=3
+PELICAN_MC_ROUTER_RETRY_INITIAL_BACKOFF=200ms
+PELICAN_MC_ROUTER_RETRY_MAX_BACKOFF=2s
+
 # Required when Pelican allocations use 0.0.0.0 or ::.
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
@@ -89,6 +100,29 @@ The `.env` file is ignored by Git and must not be committed.
 Keep `PELICAN_MC_ROUTER_IMAGE` pinned to an exact release version in production.
 This makes upgrades explicit and prevents an unrelated moving tag from changing
 the deployed application unexpectedly.
+
+## HTTP API timeouts
+
+The HTTP API uses bounded timeouts to protect the control plane from slow or
+stalled clients. The defaults are 5 seconds for request headers, 15 seconds
+for the complete request, 30 seconds for the response, and 1 minute for idle
+keep-alive connections.
+
+All timeout values must be positive Go durations. Increase them only when a
+known API client needs longer requests or responses; excessively large values
+can allow slow clients to hold connections and reduce control-plane capacity.
+
+## Control-plane read retries
+
+Pelican MC Router retries only idempotent control-plane reads after transport
+errors and HTTP `429`, `502`, `503`, or `504` responses. The defaults permit
+three total attempts with jittered exponential backoff from 200 milliseconds
+to 2 seconds. Route create and delete operations are never retried, so the
+next scheduled reconciliation remains the safe recovery path for mutations.
+
+Keep retry values bounded: higher values increase the time before a failed
+reconciliation is reported and can delay shutdown until request contexts are
+cancelled.
 
 ## Start the stack
 
@@ -221,8 +255,12 @@ curl --fail http://127.0.0.1:8080/metrics
 ```
 
 `/ready` should return HTTP 200 after setup and successful reconciliation.
-`/api/v1/status` shows cached reconciliation state, and `/metrics` returns
-Prometheus text exposition.
+`/api/v1/status` shows cached reconciliation state and the running build
+version/revision, and `/metrics` returns Prometheus text exposition.
+
+The status response includes `reconciliation.route_changes` with bounded route
+counts and a `changed` flag from the latest attempt. These diagnostics never
+contain hostnames, server identifiers, URLs, or backend error text.
 
 Inspect discovered servers:
 

@@ -7,6 +7,18 @@ API behavior, and deployment details may change between minor releases.
 
 ## Unreleased
 
+### Added
+
+- Add coordinated graceful shutdown for SIGINT and SIGTERM, including the HTTP
+  server and runtime scheduler.
+- Add configurable, bounded HTTP server header, request, response, and idle
+  timeouts.
+- Add configurable, bounded retries for transient Pelican and mc-router read
+  failures without retrying route mutations.
+- Add build version and revision to startup logs and `GET /api/v1/status`.
+- Add bounded reconciliation route diagnostics to status responses and success
+  logs without exposing routing identities or backend details.
+
 ## 0.1.2
 
 Patch release adding reconciliation readiness, cached status reporting, and

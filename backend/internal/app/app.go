@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,16 +12,18 @@ import (
 	api "github.com/zurco34/pelican-mc-router/internal/http"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/pelican"
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/scheduler"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
 	"github.com/zurco34/pelican-mc-router/internal/storage/sqlite"
+	"github.com/zurco34/pelican-mc-router/pkg/buildinfo"
 	"github.com/zurco34/pelican-mc-router/pkg/config"
 )
 
-func Run() error {
+func Run(ctx context.Context) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
@@ -46,6 +49,7 @@ func Run() error {
 			},
 		),
 		cfg.Pelican.Timeout,
+		toRetryConfig(cfg.Retry),
 	)
 
 	runtimeManager := runtime.New()
@@ -81,6 +85,7 @@ func Run() error {
 		routeSynchronizer,
 		reconciliationTracker,
 		reconciliationMetrics,
+		toRetryConfig(cfg.Retry),
 	)
 
 	setupService := setup.NewService(
@@ -89,62 +94,66 @@ func Run() error {
 		refresher,
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	if err := refresher.Refresh(ctx); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+
 		return fmt.Errorf("initialize runtime: %w", err)
+	}
+	if ctx.Err() != nil {
+		return nil
 	}
 
 	runtimeScheduler := scheduler.NewTicker()
-
-	schedulerErrors := make(chan error, 1)
-
-	go func() {
-		schedulerErrors <- runtimeScheduler.Run(
-			ctx,
-			cfg.Discovery.Interval,
-			refresher,
-		)
-	}()
 
 	httpRouter := api.NewServer(
 		runtimeManager,
 		setupService,
 		reconciliationTracker,
 		observability.NewHandler(metricsRegistry),
+		buildinfo.Current(),
 	).Router()
 
 	address := serverAddress(cfg.Server)
 
 	log.Info().
 		Str("address", address).
+		Str("version", buildinfo.Version).
+		Str("revision", buildinfo.Revision).
 		Msg("starting HTTP server")
 
-	serverErrors := make(chan error, 1)
+	server := newHTTPServer(address, httpRouter, cfg.Server)
 
-	go func() {
-		serverErrors <- http.ListenAndServe(address, httpRouter)
-	}()
+	return runLifecycle(ctx, server, func(runtimeCtx context.Context) error {
+		return runtimeScheduler.Run(
+			runtimeCtx,
+			cfg.Discovery.Interval,
+			refresher,
+		)
+	})
+}
 
-	select {
-	case err := <-serverErrors:
-		cancel()
+func toRetryConfig(cfg config.RetryConfig) retry.Config {
+	return retry.Config{
+		Attempts:       cfg.Attempts,
+		InitialBackoff: cfg.InitialBackoff,
+		MaxBackoff:     cfg.MaxBackoff,
+	}
+}
 
-		if err != nil {
-			return fmt.Errorf("serve HTTP: %w", err)
-		}
-
-		return nil
-
-	case err := <-schedulerErrors:
-		cancel()
-
-		if err != nil {
-			return fmt.Errorf("run runtime scheduler: %w", err)
-		}
-
-		return nil
+func newHTTPServer(
+	address string,
+	handler http.Handler,
+	cfg config.ServerConfig,
+) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 }
 

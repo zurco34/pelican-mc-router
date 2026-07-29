@@ -32,6 +32,19 @@ func TestLoadDefaults(t *testing.T) {
 		)
 	}
 
+	if cfg.Server.ReadHeaderTimeout != 5*time.Second {
+		t.Errorf("Server.ReadHeaderTimeout = %v, want 5s", cfg.Server.ReadHeaderTimeout)
+	}
+	if cfg.Server.ReadTimeout != 15*time.Second {
+		t.Errorf("Server.ReadTimeout = %v, want 15s", cfg.Server.ReadTimeout)
+	}
+	if cfg.Server.WriteTimeout != 30*time.Second {
+		t.Errorf("Server.WriteTimeout = %v, want 30s", cfg.Server.WriteTimeout)
+	}
+	if cfg.Server.IdleTimeout != time.Minute {
+		t.Errorf("Server.IdleTimeout = %v, want 1m", cfg.Server.IdleTimeout)
+	}
+
 	if cfg.Pelican.Timeout != 15*time.Second {
 		t.Errorf(
 			"Pelican.Timeout = %v, want %v",
@@ -107,6 +120,10 @@ func TestLoadFromFile(t *testing.T) {
 server:
   host: "127.0.0.1"
   port: 9090
+  read_header_timeout: 6s
+  read_timeout: 16s
+  write_timeout: 31s
+  idle_timeout: 61s
 
 pelican:
   url: "https://panel.example.com"
@@ -164,6 +181,18 @@ database:
 			cfg.Server.Port,
 			9090,
 		)
+	}
+	if cfg.Server.ReadHeaderTimeout != 6*time.Second {
+		t.Errorf("Server.ReadHeaderTimeout = %v, want 6s", cfg.Server.ReadHeaderTimeout)
+	}
+	if cfg.Server.ReadTimeout != 16*time.Second {
+		t.Errorf("Server.ReadTimeout = %v, want 16s", cfg.Server.ReadTimeout)
+	}
+	if cfg.Server.WriteTimeout != 31*time.Second {
+		t.Errorf("Server.WriteTimeout = %v, want 31s", cfg.Server.WriteTimeout)
+	}
+	if cfg.Server.IdleTimeout != 61*time.Second {
+		t.Errorf("Server.IdleTimeout = %v, want 61s", cfg.Server.IdleTimeout)
 	}
 
 	if cfg.Pelican.URL != "https://panel.example.com" {

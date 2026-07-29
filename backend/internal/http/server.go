@@ -14,6 +14,7 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 	"github.com/zurco34/pelican-mc-router/internal/setup"
+	"github.com/zurco34/pelican-mc-router/pkg/buildinfo"
 )
 
 type SetupService interface {
@@ -37,6 +38,7 @@ type Server struct {
 	setup                SetupService
 	reconciliationStatus ReconciliationStatusProvider
 	metrics              http.Handler
+	build                buildinfo.Info
 }
 
 func NewServer(
@@ -44,12 +46,19 @@ func NewServer(
 	setupService SetupService,
 	reconciliationStatus ReconciliationStatusProvider,
 	metrics http.Handler,
+	build ...buildinfo.Info,
 ) *Server {
+	info := buildinfo.Current()
+	if len(build) > 0 {
+		info = build[0]
+	}
+
 	return &Server{
 		runtime:              runtimeManager,
 		setup:                setupService,
 		reconciliationStatus: reconciliationStatus,
 		metrics:              metrics,
+		build:                info,
 	}
 }
 
@@ -75,17 +84,27 @@ type readiness struct {
 }
 
 type reconciliationStatusResponse struct {
-	InProgress          bool    `json:"in_progress"`
-	LastOutcome         *string `json:"last_outcome"`
-	LastStartedAt       *string `json:"last_started_at"`
-	LastCompletedAt     *string `json:"last_completed_at"`
-	LastSuccessAt       *string `json:"last_success_at"`
-	LastDurationMS      int64   `json:"last_duration_ms"`
-	ConsecutiveFailures int     `json:"consecutive_failures"`
-	LastError           *string `json:"last_error"`
+	InProgress          bool                 `json:"in_progress"`
+	LastOutcome         *string              `json:"last_outcome"`
+	LastStartedAt       *string              `json:"last_started_at"`
+	LastCompletedAt     *string              `json:"last_completed_at"`
+	LastSuccessAt       *string              `json:"last_success_at"`
+	LastDurationMS      int64                `json:"last_duration_ms"`
+	ConsecutiveFailures int                  `json:"consecutive_failures"`
+	LastError           *string              `json:"last_error"`
+	RouteChanges        routeChangesResponse `json:"route_changes"`
+}
+
+type routeChangesResponse struct {
+	Desired int  `json:"desired"`
+	Created int  `json:"created"`
+	Updated int  `json:"updated"`
+	Deleted int  `json:"deleted"`
+	Changed bool `json:"changed"`
 }
 
 type statusResponse struct {
+	Build           buildinfo.Info               `json:"build"`
 	SetupCompleted  bool                         `json:"setup_completed"`
 	Ready           bool                         `json:"ready"`
 	ReadinessReason string                       `json:"readiness_reason"`
@@ -148,6 +167,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	result := readinessFor(setupCompleted, reconciliationStatus)
 
 	writeJSON(w, http.StatusOK, statusResponse{
+		Build:           s.build,
 		SetupCompleted:  setupCompleted,
 		Ready:           result.Ready,
 		ReadinessReason: result.Reason,
@@ -169,6 +189,13 @@ func reconciliationResponse(
 		LastDurationMS:      status.LastDurationMS,
 		ConsecutiveFailures: status.ConsecutiveFailures,
 		LastError:           status.LastError,
+		RouteChanges: routeChangesResponse{
+			Desired: status.RouteChanges.Desired,
+			Created: status.RouteChanges.Created,
+			Updated: status.RouteChanges.Updated,
+			Deleted: status.RouteChanges.Deleted,
+			Changed: status.RouteChanges.Changed,
+		},
 	}
 }
 

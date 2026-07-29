@@ -1,6 +1,10 @@
 server:
   host: "0.0.0.0"
   port: 8080
+  read_header_timeout: 5s
+  read_timeout: 15s
+  write_timeout: 30s
+  idle_timeout: 1m
 
 database:
   path: "./data/pelican-mc-router.db"
@@ -9,6 +13,11 @@ pelican:
   url: ""
   api_key: ""
   timeout: 15s
+
+retry:
+  attempts: 3
+  initial_backoff: 200ms
+  max_backoff: 2s
 
 discovery:
   interval: 30s

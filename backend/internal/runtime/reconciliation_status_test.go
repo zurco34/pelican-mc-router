@@ -4,6 +4,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/zurco34/pelican-mc-router/internal/router"
 )
 
 func TestReconciliationTrackerInitialSnapshot(t *testing.T) {
@@ -27,10 +29,14 @@ func TestReconciliationTrackerTransitions(t *testing.T) {
 	if !inProgress.InProgress || inProgress.LastStartedAt == nil || !inProgress.LastStartedAt.Equal(started) || inProgress.LastOutcome != nil {
 		t.Fatalf("in-progress status = %+v", inProgress)
 	}
-	tracker.CompleteSuccess()
+	changes := router.ReconciliationResult{Desired: 2, Created: 1, Changed: true}
+	tracker.CompleteSuccess(changes)
 	success := tracker.Snapshot()
 	if success.LastOutcome == nil || *success.LastOutcome != ReconciliationOutcomeSuccess || success.LastSuccessAt == nil || !success.LastSuccessAt.Equal(completed) || success.LastDurationMS != 125 {
 		t.Fatalf("success status = %+v", success)
+	}
+	if success.RouteChanges != changes {
+		t.Fatalf("route changes = %#v, want %#v", success.RouteChanges, changes)
 	}
 
 	tracker.Start()

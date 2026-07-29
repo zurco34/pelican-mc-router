@@ -11,6 +11,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/zurco34/pelican-mc-router/internal/retry"
 )
 
 const (
@@ -21,11 +23,13 @@ const (
 type ClientConfig struct {
 	BaseURL    string
 	HTTPClient *http.Client
+	Retry      retry.Config
 }
 
 type Client struct {
 	baseURL    *url.URL
 	httpClient *http.Client
+	retry      retry.Config
 }
 
 type routeResponse struct {
@@ -77,6 +81,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	return &Client{
 		baseURL:    baseURL,
 		httpClient: httpClient,
+		retry:      cfg.Retry,
 	}, nil
 }
 
@@ -102,7 +107,9 @@ func (c *Client) ListRoutes(
 		)
 	}
 
-	response, err := c.httpClient.Do(request)
+	response, err := retry.Do(ctx, c.retry, func() (*http.Response, error) {
+		return c.httpClient.Do(request)
+	})
 	if err != nil {
 		return nil, fmt.Errorf(
 			"mcrouter: list routes request: %w",
