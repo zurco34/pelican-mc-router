@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
+	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
 	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
@@ -57,6 +58,10 @@ type RoutePolicyStore interface {
 	Delete(context.Context, string, int64) error
 }
 
+type OperationalHistoryStore interface {
+	List(context.Context, int) ([]operationalhistory.Event, error)
+}
+
 type setupRequest struct {
 	PelicanURL        string `json:"pelican_url"`
 	PelicanSecretName string `json:"pelican_secret_name"`
@@ -77,6 +82,7 @@ type Server struct {
 	managementAuthSet    bool
 	actionLimiter        *actioncontrol.Limiter
 	routePolicies        RoutePolicyStore
+	operationalHistory   OperationalHistoryStore
 }
 
 func (s *Server) WithActionLimiter(limiter *actioncontrol.Limiter) *Server {
@@ -126,6 +132,7 @@ func (s *Server) Router() http.Handler {
 	router.Get("/api/v1/routes", s.managementViewer(s.listRoutes))
 	router.Get("/api/v1/routes/preview", s.managementViewer(s.previewRoutes))
 	router.Get("/api/v1/route-policies", s.managementViewer(s.listRoutePolicies))
+	router.Get("/api/v1/operational-history", s.managementViewer(s.listOperationalHistory))
 	router.Post("/api/v1/route-policies", s.managementOperator(s.createRoutePolicy))
 	router.Put("/api/v1/route-policies/{serverUUID}", s.managementOperator(s.updateRoutePolicy))
 	router.Delete("/api/v1/route-policies/{serverUUID}", s.managementOperator(s.deleteRoutePolicy))
@@ -137,6 +144,37 @@ func (s *Server) Router() http.Handler {
 }
 
 func (s *Server) WithRoutePolicies(store RoutePolicyStore) *Server { s.routePolicies = store; return s }
+
+func (s *Server) WithOperationalHistory(store OperationalHistoryStore) *Server {
+	s.operationalHistory = store
+	return s
+}
+
+type operationalHistoryResponse struct {
+	Events []operationalhistory.Event `json:"events"`
+}
+
+func (s *Server) listOperationalHistory(w http.ResponseWriter, r *http.Request) {
+	if s.operationalHistory == nil {
+		http.NotFound(w, r)
+		return
+	}
+	limit := operationalhistory.MaxPageSize
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > operationalhistory.MaxPageSize {
+			writeJSONError(w, http.StatusBadRequest, "invalid history limit")
+			return
+		}
+		limit = value
+	}
+	events, err := s.operationalHistory.List(r.Context(), limit)
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "operational history unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, operationalHistoryResponse{Events: events})
+}
 
 type routePolicyRequest struct {
 	ServerUUID      string   `json:"server_uuid"`
