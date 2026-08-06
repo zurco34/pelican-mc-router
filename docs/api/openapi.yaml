@@ -40,7 +40,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/HistoryLimit'}]
       responses: {'200': {$ref: '#/components/responses/OperationalHistory'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/v1/dashboard/reconcile:
-    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}}}
+    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '408': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/settings:
     put: {operationId: updateSettings, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SettingsRequest'}}}}, responses: {'204': {description: Settings activated}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}}}
   /api/v1/route-policies:
@@ -73,7 +73,7 @@ components:
     RoutePolicies: {description: Policies, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicies'}}}}
     RoutePolicy: {description: Policy, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicy'}}}}
     OperationalHistory: {description: Bounded events, content: {application/json: {schema: {$ref: '#/components/schemas/OperationalHistory'}}}}
-    ManualReconcile: {description: Reconciliation accepted, content: {application/json: {schema: {$ref: '#/components/schemas/ManualReconcile'}}}}
+    ManualReconcile: {description: Reconciliation completed, content: {application/json: {schema: {$ref: '#/components/schemas/ManualReconcile'}}}}
   schemas:
     Error: {type: object, required: [error], properties: {error: {type: string}}}
     Readiness: {type: object, required: [ready, reason], properties: {ready: {type: boolean}, reason: {type: string, enum: [ready, setup_incomplete, reconciliation_pending, reconciliation_failed, status_unavailable]}}}
@@ -93,4 +93,4 @@ components:
     RoutePolicies: {type: object, required: [policies], properties: {policies: {type: array, items: {$ref: '#/components/schemas/RoutePolicy'}}}}
     OperationalEvent: {type: object, additionalProperties: true, description: Allowlisted reconciliation outcome and numeric diagnostics.}
     OperationalHistory: {type: object, required: [events], properties: {events: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/OperationalEvent'}}}}
-    ManualReconcile: {type: object, additionalProperties: true}
+    ManualReconcile: {type: object, required: [reconciliation], properties: {reconciliation: {$ref: '#/components/schemas/Reconciliation'}}, additionalProperties: false}
