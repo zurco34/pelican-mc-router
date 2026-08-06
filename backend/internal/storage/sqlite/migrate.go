@@ -12,6 +12,19 @@ import (
 )
 
 func Migrate(db *sql.DB) error {
+	entries, err := fs.ReadDir(migrations.Files, ".")
+	if err != nil {
+		return fmt.Errorf("read embedded migrations: %w", err)
+	}
+	known := make(map[string]struct{})
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			known[entry.Name()] = struct{}{}
+		}
+	}
+	if err := rejectUnknownMigrations(db, known); err != nil {
+		return err
+	}
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version TEXT PRIMARY KEY,
@@ -23,11 +36,6 @@ func Migrate(db *sql.DB) error {
 	}
 	if _, err := db.Exec(`ALTER TABLE schema_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("add migration checksum column: %w", err)
-	}
-
-	entries, err := fs.ReadDir(migrations.Files, ".")
-	if err != nil {
-		return fmt.Errorf("read embedded migrations: %w", err)
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -65,6 +73,31 @@ func Migrate(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func rejectUnknownMigrations(db *sql.DB, known map[string]struct{}) error {
+	var exists int
+	if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations')`).Scan(&exists); err != nil {
+		return fmt.Errorf("check migration table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	rows, err := db.Query(`SELECT version FROM schema_migrations`)
+	if err != nil {
+		return fmt.Errorf("list applied migrations: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return fmt.Errorf("read applied migration: %w", err)
+		}
+		if _, ok := known[version]; !ok {
+			return fmt.Errorf("database schema is newer than this binary")
+		}
+	}
+	return rows.Err()
 }
 
 func migrationApplied(db *sql.DB, version string) (bool, string, error) {
