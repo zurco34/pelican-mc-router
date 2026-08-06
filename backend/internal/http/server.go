@@ -98,7 +98,14 @@ func (s *Server) WithActionHistory(store interface {
 
 func (s *Server) recordAction(ctx context.Context, action actionhistory.Action, outcome actionhistory.Outcome) {
 	if s.actionHistory != nil {
-		_ = s.actionHistory.Append(ctx, actionhistory.Event{Action: action, Outcome: outcome})
+		if ctx.Err() != nil {
+			ctx = context.Background()
+		}
+		bounded, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		if err := s.actionHistory.Append(bounded, actionhistory.Event{Action: action, Outcome: outcome}); err != nil {
+			slog.Warn("record sensitive action history failed")
+		}
 	}
 }
 
@@ -107,11 +114,12 @@ func (s *Server) WithActionLimiter(limiter *actioncontrol.Limiter) *Server {
 	return s
 }
 
-func (s *Server) allowAction(w http.ResponseWriter, action actioncontrol.Action) bool {
+func (s *Server) allowAction(w http.ResponseWriter, r *http.Request, action actioncontrol.Action) bool {
 	if s.actionLimiter == nil || s.actionLimiter.Allow(action, time.Now()) {
 		return true
 	}
 	writeJSONError(w, http.StatusTooManyRequests, "action temporarily unavailable")
+	s.recordAction(r.Context(), actionhistory.ActionRateLimit, actionhistory.OutcomeDenied)
 	return false
 }
 
@@ -657,7 +665,7 @@ func (s *Server) configureSetup(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if !s.allowAction(w, actioncontrol.ActionSetup) {
+	if !s.allowAction(w, r, actioncontrol.ActionSetup) {
 		return
 	}
 	var request setupRequest
@@ -722,7 +730,7 @@ func (s *Server) updateSettings(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if !s.allowAction(w, actioncontrol.ActionSettings) {
+	if !s.allowAction(w, r, actioncontrol.ActionSettings) {
 		return
 	}
 	var request setupRequest

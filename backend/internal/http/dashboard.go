@@ -86,7 +86,7 @@ func (s *Server) reconcileDashboard(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !s.allowAction(w, actioncontrol.ActionReconcile) {
+	if !s.allowAction(w, r, actioncontrol.ActionReconcile) {
 		return
 	}
 	if r.Header.Get(dashboardCSRFHeader) != "1" {
