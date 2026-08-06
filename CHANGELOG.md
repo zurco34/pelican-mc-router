@@ -8,11 +8,16 @@
   persistence, compensation, and publication.
 - Startup refuses databases containing migrations unsupported by the running
   server binary, protecting rollback safety.
+- Completed setup routes now use the sanitized versioned JSON error envelope.
 
 ### Changed
 
 - Deployment guidance now requires a real Pelican panel-issued Application API
   key and documents named-volume offline recovery.
+- OpenAPI documents manual-reconciliation cancellation and unavailable
+  outcomes; disposable Compose smoke verifies setup-incomplete readiness.
+- Sensitive-action persistence uses bounded cancellation-safe recording and
+  records rate-limit denials.
 
 ### Upgrade notes
 
