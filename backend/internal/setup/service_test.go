@@ -83,12 +83,16 @@ type stubCandidateActivator struct {
 
 func (s *stubCandidateActivator) Refresh(context.Context) error { return nil }
 
-func (s *stubCandidateActivator) Prepare(context.Context, settings.Settings) (func(), error) {
+func (s *stubCandidateActivator) Activate(_ context.Context, _ settings.Settings, persist func() error) error {
 	s.prepared = true
 	if s.err != nil {
-		return nil, s.err
+		return s.err
 	}
-	return func() { s.published = true }, nil
+	if err := persist(); err != nil {
+		return err
+	}
+	s.published = true
+	return nil
 }
 
 func (s *stubRuntimeRefresher) Refresh(context.Context) error {

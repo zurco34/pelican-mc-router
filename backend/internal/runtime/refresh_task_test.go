@@ -151,7 +151,7 @@ func TestRefreshTaskSynchronizesRoutesBeforePublishingRuntime(
 	}
 }
 
-func TestRefreshTaskPreparePublishesOnlyAfterPromotion(t *testing.T) {
+func TestRefreshTaskActivatePublishesOnlyAfterPersistence(t *testing.T) {
 	manager := New()
 	synchronizer := &recordingRouteSynchronizer{manager: manager}
 	task := NewRefreshTask(
@@ -164,13 +164,14 @@ func TestRefreshTaskPreparePublishesOnlyAfterPromotion(t *testing.T) {
 		nil,
 	)
 
-	publish, err := task.Prepare(context.Background(), settings.Settings{
+	persisted := false
+	err := task.Activate(context.Background(), settings.Settings{
 		PelicanURL:    "https://panel.example.com",
 		PelicanAPIKey: "test-key",
 		RouterDomain:  "mc.example.com",
-	})
+	}, func() error { persisted = true; return nil })
 	if err != nil {
-		t.Fatalf("Prepare() error = %v", err)
+		t.Fatalf("Activate() error = %v", err)
 	}
 	if synchronizer.calls != 1 {
 		t.Fatalf("Sync() calls = %d, want 1", synchronizer.calls)
@@ -178,13 +179,11 @@ func TestRefreshTaskPreparePublishesOnlyAfterPromotion(t *testing.T) {
 	if synchronizer.runtimePublished {
 		t.Fatal("candidate runtime was published before preparation completed")
 	}
-	if manager.Routing() != nil {
-		t.Fatal("candidate runtime was published before promotion")
+	if !persisted {
+		t.Fatal("candidate settings were not persisted")
 	}
-
-	publish()
 	if manager.Routing() == nil {
-		t.Fatal("candidate runtime was not published after promotion")
+		t.Fatal("candidate runtime was not published after persistence")
 	}
 }
 
