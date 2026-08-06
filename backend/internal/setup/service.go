@@ -35,7 +35,7 @@ type RuntimeRefresher interface {
 }
 
 type CandidateRuntimeActivator interface {
-	Prepare(context.Context, settings.Settings) (func(), error)
+	Activate(context.Context, settings.Settings, func() error) error
 }
 
 type SecretResolver interface{ Resolve(string) ([]byte, error) }
@@ -96,14 +96,9 @@ func (s *Service) prepareAndPublish(
 	if !ok {
 		return errors.New("setup: candidate runtime activation is unavailable")
 	}
-	publish, err := activator.Prepare(ctx, input)
-	if err != nil {
+	if err := activator.Activate(ctx, input, func() error { return save(input) }); err != nil {
 		return fmt.Errorf("activate candidate runtime: %w", err)
 	}
-	if err := save(input); err != nil {
-		return fmt.Errorf("save settings: %w", err)
-	}
-	publish()
 	return nil
 }
 
@@ -139,14 +134,9 @@ func (s *Service) Setup(
 	if !ok {
 		return errors.New("setup: candidate runtime activation is unavailable")
 	}
-	publish, err := activator.Prepare(ctx, input)
-	if err != nil {
+	if err := activator.Activate(ctx, input, s.store.PromotePendingSetup); err != nil {
 		return fmt.Errorf("activate candidate runtime: %w", err)
 	}
-	if err := s.store.PromotePendingSetup(); err != nil {
-		return fmt.Errorf("promote setup: %w", err)
-	}
-	publish()
 	return nil
 }
 

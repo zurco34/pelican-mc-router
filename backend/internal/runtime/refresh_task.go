@@ -169,32 +169,46 @@ func (r *RefreshTask) Refresh(ctx context.Context) error {
 	return nil
 }
 
-// Prepare activates candidate settings without publishing them to readers.
-// The returned function publishes the already reconciled candidate.
-func (r *RefreshTask) Prepare(ctx context.Context, value settings.Settings) (func(), error) {
+// Activate serializes candidate reconciliation, durable promotion, and runtime
+// publication. The persistence callback must not perform network I/O.
+func (r *RefreshTask) Activate(ctx context.Context, value settings.Settings, persist func() error) error {
 	if err := r.acquire(ctx); err != nil {
-		return nil, err
+		return err
 	}
 	defer r.release()
 	discoveryService, routingService, err := r.buildRuntimeServicesFor(value)
 	if err != nil {
-		return nil, fmt.Errorf("build candidate runtime services: %w", err)
+		return fmt.Errorf("build candidate runtime services: %w", err)
 	}
 	if _, productionSynchronizer := r.synchronizer.(*router.Synchronizer); productionSynchronizer {
 		inventory, ok := discoveryService.(*Inventory)
 		if !ok {
-			return nil, fmt.Errorf("prepare inventory: inventory service is unavailable")
+			return fmt.Errorf("prepare inventory: inventory service is unavailable")
 		}
 		if err := inventory.Refresh(ctx); err != nil {
-			return nil, fmt.Errorf("prepare inventory: %w", err)
+			return fmt.Errorf("prepare inventory: %w", err)
 		}
 	}
 	if r.synchronizer != nil {
 		if _, err := synchronizeRoutes(ctx, r.synchronizer, routingService); err != nil {
-			return nil, fmt.Errorf("synchronize candidate routes: %w", err)
+			return fmt.Errorf("synchronize candidate routes: %w", err)
 		}
 	}
-	return func() { r.manager.Set(discoveryService, routingService) }, nil
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := persist(); err != nil {
+		// Best-effort compensation uses the existing, last-known-good source while
+		// this activation remains the sole refresh owner.
+		if previous := r.manager.Routing(); previous != nil && r.synchronizer != nil {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_, _ = synchronizeRoutes(cleanup, r.synchronizer, previous)
+			cancel()
+		}
+		return fmt.Errorf("persist candidate activation: %w", err)
+	}
+	r.manager.Set(discoveryService, routingService)
+	return nil
 }
 
 func (r *RefreshTask) acquire(ctx context.Context) error {
