@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
+	"github.com/zurco34/pelican-mc-router/internal/actionhistory"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
@@ -99,15 +100,18 @@ func (s *Server) reconcileDashboard(w http.ResponseWriter, r *http.Request) {
 	slog.Info("dashboard manual reconciliation requested")
 	if err := s.dashboardRefresh.Refresh(r.Context()); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			s.recordAction(r.Context(), actionhistory.ActionManualReconciliation, actionhistory.OutcomeCanceled)
 			slog.Info("dashboard manual reconciliation canceled")
 			writeJSONError(w, http.StatusRequestTimeout, "reconciliation canceled")
 			return
 		}
 		slog.Warn("dashboard manual reconciliation failed")
+		s.recordAction(r.Context(), actionhistory.ActionManualReconciliation, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusServiceUnavailable, "reconciliation unavailable")
 		return
 	}
 	slog.Info("dashboard manual reconciliation completed")
+	s.recordAction(r.Context(), actionhistory.ActionManualReconciliation, actionhistory.OutcomeSuccess)
 	writeJSON(w, http.StatusOK, manualReconcileResponse{
 		Reconciliation: reconciliationResponse(s.reconciliationStatus.Snapshot()),
 	})
