@@ -223,6 +223,10 @@ printf 'Health response: %s\n' "${health_response}"
 [[ "${health_response}" = "OK" ]] ||
   fail "unexpected health response: ${health_response}"
 
+log "Verifying setup-incomplete readiness"
+ready_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${PELICAN_MC_ROUTER_HTTP_PORT}/ready")"
+[[ "${ready_status}" = "503" ]] || fail "fresh stack readiness status = ${ready_status}, want 503"
+
 log "Verifying application runtime user"
 runtime_identity="$(
   container_exec \
