@@ -91,7 +91,10 @@ type Server struct {
 
 func (s *Server) WithActionHistory(store interface {
 	Append(context.Context, actionhistory.Event) error
-}) *Server { s.actionHistory = store; return s }
+}) *Server {
+	s.actionHistory = store
+	return s
+}
 
 func (s *Server) recordAction(ctx context.Context, action actionhistory.Action, outcome actionhistory.Outcome) {
 	if s.actionHistory != nil {
@@ -323,7 +326,7 @@ func (s *Server) bootstrapOnly(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if completed {
-			http.NotFound(w, r)
+			writeJSONError(w, http.StatusNotFound, "setup is unavailable")
 			return
 		}
 		if s.bootstrapAuth == nil {
