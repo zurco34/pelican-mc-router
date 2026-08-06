@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.1 - 2026-08-06
+
+### Fixed
+
+- Setup routes remain closed after activation, including after restart.
+- Initial setup is promoted only after candidate runtime activation succeeds;
+  failed activation remains bootstrap-retryable.
+
+### Added
+
+- Complete OpenAPI route-contract validation and a production-image offline
+  `sqlite-recovery` binary.
+- Bounded allowlisted sensitive-action history foundation and corrected v1
+  security/deployment guidance.
+
 ## 1.0.0 - 2026-07-29
 
 ### Added
