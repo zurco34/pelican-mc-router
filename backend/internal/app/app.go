@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
+	"github.com/zurco34/pelican-mc-router/internal/actionhistory"
 	"github.com/zurco34/pelican-mc-router/internal/bootstrap"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
@@ -51,6 +52,7 @@ func Run(ctx context.Context) error {
 	settingsStore := settings.NewStore(db)
 	routePolicyStore := routepolicy.NewStore(db)
 	historyStore := operationalhistory.NewStore(db)
+	actionHistoryStore := actionhistory.NewStore(db)
 	secretReader, err := secretfile.New(cfg.Secrets.Directory)
 	if err != nil {
 		return fmt.Errorf("create secret reader: %w", err)
@@ -134,7 +136,7 @@ func Run(ctx context.Context) error {
 		setupService,
 		reconciliationTracker,
 		buildinfo.Current(),
-	)).WithOperationalHistory(historyStore).WithActionLimiter(actioncontrol.New(time.Second))
+	)).WithOperationalHistory(historyStore).WithActionHistory(actionHistoryStore).WithActionLimiter(actioncontrol.New(time.Second))
 	setupComplete, err := settingsStore.IsSetupComplete()
 	if err != nil {
 		return fmt.Errorf("determine setup status: %w", err)

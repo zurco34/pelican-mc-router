@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zurco34/pelican-mc-router/internal/actioncontrol"
+	"github.com/zurco34/pelican-mc-router/internal/actionhistory"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
 	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
@@ -83,6 +84,19 @@ type Server struct {
 	actionLimiter        *actioncontrol.Limiter
 	routePolicies        RoutePolicyStore
 	operationalHistory   OperationalHistoryStore
+	actionHistory        interface {
+		Append(context.Context, actionhistory.Event) error
+	}
+}
+
+func (s *Server) WithActionHistory(store interface {
+	Append(context.Context, actionhistory.Event) error
+}) *Server { s.actionHistory = store; return s }
+
+func (s *Server) recordAction(ctx context.Context, action actionhistory.Action, outcome actionhistory.Outcome) {
+	if s.actionHistory != nil {
+		_ = s.actionHistory.Append(ctx, actionhistory.Event{Action: action, Outcome: outcome})
+	}
 }
 
 func (s *Server) WithActionLimiter(limiter *actioncontrol.Limiter) *Server {
