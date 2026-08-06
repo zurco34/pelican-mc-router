@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.2 - Unreleased
+
+### Fixed
+
+- Candidate runtime activation remains serialized through reconciliation,
+  persistence, compensation, and publication.
+- Startup refuses databases containing migrations unsupported by the running
+  server binary, protecting rollback safety.
+
+### Changed
+
+- Deployment guidance now requires a real Pelican panel-issued Application API
+  key and documents named-volume offline recovery.
+
+### Upgrade notes
+
+- Back up the SQLite volume before upgrade. Migrations are forward-only; use
+  the pre-upgrade backup when returning to an older binary is required.
+
 ## 1.0.1 - 2026-08-06
 
 ### Fixed
