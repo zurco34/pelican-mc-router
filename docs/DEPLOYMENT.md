@@ -227,13 +227,16 @@ Initial setup requires:
 - a mounted Pelican credential secret file and its bounded name;
 - the base Minecraft routing domain.
 
-Create an owner-readable Pelican credential file and keep its name separate
-from its value:
+Create a Pelican **Application API key** in the Pelican panel. Do not generate
+this value locally. Write the issued key through stdin or a local editor so it
+is not placed in a command argument or shell history; generate only the
+operator-owned bootstrap token locally:
 
 ```bash
 install -d -m 700 ./secrets
 umask 077
-openssl rand -base64 48 > ./secrets/pelican-api-key
+cat > ./secrets/pelican-api-key
+# paste the panel-issued Application API key, then press Ctrl-D
 openssl rand -base64 48 > ./secrets/bootstrap-token
 ```
 
@@ -355,7 +358,7 @@ them before a restore:
 
 ```bash
 docker run --rm --entrypoint sqlite-recovery \
-  -v "$PWD/data:/data:ro" ghcr.io/zurco34/pelican-mc-router:1.0.1 \
+  -v "$(docker volume inspect -f '{{ .Name }}' pelican-mc-router-data):/data:ro" ghcr.io/zurco34/pelican-mc-router:1.0.1 \
   -operation integrity -source /data/pelican-mc-router.db
 
 # Use a separate writable, operator-protected target mount for backup/restore.
