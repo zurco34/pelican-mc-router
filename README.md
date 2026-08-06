@@ -121,8 +121,8 @@ Only one routing backend is active for a deployment.
 - `GET /dashboard` renders the same cached operational state for browser use.
   It is read-only, does not trigger reconciliation, and must be kept private or
   behind authenticated reverse-proxy access control.
-  Optional OIDC protection verifies a forwarded bearer token and a required
-  role; see [dashboard OIDC authorization](docs/adr/ADR-0006-dashboard-oidc-authorization.md).
+  Verified OIDC authorization is required for normal management access after
+  bootstrap; see [dashboard OIDC authorization](docs/adr/ADR-0006-dashboard-oidc-authorization.md).
 - `POST /api/v1/dashboard/reconcile` is available only with enabled dashboard
   OIDC protection, the configured operator role, and the same-origin
   `X-Pelican-MC-Router-CSRF: 1` request header. It runs through the existing
