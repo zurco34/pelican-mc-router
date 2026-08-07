@@ -708,6 +708,7 @@ func (s *Server) configureSetup(
 	}
 
 	if err := s.setup.Setup(r.Context(), setupSettings); err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionSetup, outcomeForError(err))
 		if writeSetupError(w, err) {
 			return
 		}
@@ -723,6 +724,7 @@ func (s *Server) configureSetup(
 		return
 	}
 
+	s.recordAction(r.Context(), actionhistory.ActionSetup, actionhistory.OutcomeSuccess)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -773,6 +775,7 @@ func (s *Server) updateSettings(
 	}
 
 	if err := s.setup.Update(r.Context(), updatedSettings); err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionSettings, outcomeForError(err))
 		if writeSetupError(w, err) {
 			return
 		}
@@ -787,7 +790,15 @@ func (s *Server) updateSettings(
 
 		return
 	}
+	s.recordAction(r.Context(), actionhistory.ActionSettings, actionhistory.OutcomeSuccess)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func outcomeForError(err error) actionhistory.Outcome {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return actionhistory.OutcomeCanceled
+	}
+	return actionhistory.OutcomeFailure
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
