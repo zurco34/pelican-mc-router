@@ -112,9 +112,13 @@ The application accepts only regular, owner-readable files with bounded names
 from this directory; it refuses paths, symlinks, group-readable files, and
 world-readable files.
 
-This mount provides the one-time bootstrap token now and will provide
-file-backed Pelican credential references in a later secure-management-plane
-change. Do not put a token or API key in `.env`, logs, or shell history.
+This mount provides both the one-time bootstrap token and file-backed Pelican
+credential references. For rootful Docker, use directory mode `0700`, file
+mode `0600`, and ownership `10001:10001` so the non-root container can traverse
+the directory and read owner-only files. For rootless Podman, set equivalent
+mapped ownership with `podman unshare chown 10001:10001 ./secrets/*`; apply an
+SELinux relabel option only when the host requires it. Do not put a token or
+API key in `.env`, logs, or shell history.
 
 For an uninitialized database, create the configured bootstrap-token file in
 this directory before starting the service. Its contents are a random bearer
