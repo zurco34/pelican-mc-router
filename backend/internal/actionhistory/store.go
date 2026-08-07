@@ -75,6 +75,26 @@ func (s *Store) Append(ctx context.Context, event Event) error {
 	}
 	return nil
 }
+
+func (s *Store) List(ctx context.Context, limit int) ([]Event, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT occurred_at, action, outcome FROM sensitive_action_history ORDER BY occurred_at DESC, id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list sensitive action history: %w", err)
+	}
+	defer rows.Close()
+	events := make([]Event, 0)
+	for rows.Next() {
+		var event Event
+		if err := rows.Scan(&event.OccurredAt, &event.Action, &event.Outcome); err != nil {
+			return nil, fmt.Errorf("scan sensitive action history: %w", err)
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
 func validAction(v Action) bool {
 	return v == ActionBootstrap || v == ActionSetup || v == ActionSettings || v == ActionManualReconciliation || v == ActionRoutePolicy || v == ActionRateLimit
 }

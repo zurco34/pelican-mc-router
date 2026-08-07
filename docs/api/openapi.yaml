@@ -39,6 +39,12 @@ paths:
       security: [{oidcBearer: []}]
       parameters: [{$ref: '#/components/parameters/HistoryLimit'}]
       responses: {'200': {$ref: '#/components/responses/OperationalHistory'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
+  /api/v1/action-history:
+    get:
+      operationId: listActionHistory
+      security: [{oidcBearer: []}]
+      parameters: [{$ref: '#/components/parameters/HistoryLimit'}]
+      responses: {'200': {$ref: '#/components/responses/ActionHistory'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/v1/dashboard/reconcile:
     post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '408': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/settings:
@@ -73,6 +79,7 @@ components:
     RoutePolicies: {description: Policies, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicies'}}}}
     RoutePolicy: {description: Policy, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicy'}}}}
     OperationalHistory: {description: Bounded events, content: {application/json: {schema: {$ref: '#/components/schemas/OperationalHistory'}}}}
+    ActionHistory: {description: Bounded sensitive actions, content: {application/json: {schema: {$ref: '#/components/schemas/ActionHistory'}}}}
     ManualReconcile: {description: Reconciliation completed, content: {application/json: {schema: {$ref: '#/components/schemas/ManualReconcile'}}}}
   schemas:
     Error: {type: object, required: [error], properties: {error: {type: string}}, additionalProperties: false}
@@ -94,4 +101,6 @@ components:
     RoutePolicies: {type: object, required: [policies], properties: {policies: {type: array, items: {$ref: '#/components/schemas/RoutePolicy'}}}}
     OperationalEvent: {type: object, required: [occurred_at, kind, outcome, desired, created, updated, deleted, changed], properties: {occurred_at: {type: string, format: date-time}, kind: {type: string, enum: [reconciliation, setup, settings, manual_reconcile]}, outcome: {type: string, enum: [not_configured, success, failure]}, desired: {type: integer, minimum: 0}, created: {type: integer, minimum: 0}, updated: {type: integer, minimum: 0}, deleted: {type: integer, minimum: 0}, changed: {type: boolean}}, additionalProperties: false}
     OperationalHistory: {type: object, required: [events], properties: {events: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/OperationalEvent'}}}}
+    ActionEvent: {type: object, required: [occurred_at, action, outcome], properties: {occurred_at: {type: string, format: date-time}, action: {type: string, enum: [bootstrap_authorization, setup, settings_update, manual_reconciliation, route_policy_mutation, rate_limit_rejection]}, outcome: {type: string, enum: [success, failure, denied, canceled]}}, additionalProperties: false}
+    ActionHistory: {type: object, required: [events], properties: {events: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/ActionEvent'}}}, additionalProperties: false}
     ManualReconcile: {type: object, required: [reconciliation], properties: {reconciliation: {$ref: '#/components/schemas/Reconciliation'}}, additionalProperties: false}

@@ -136,7 +136,7 @@ func Run(ctx context.Context) error {
 		setupService,
 		reconciliationTracker,
 		buildinfo.Current(),
-	)).WithOperationalHistory(historyStore).WithActionHistory(actionHistoryStore).WithActionLimiter(actioncontrol.New(time.Second))
+	)).WithOperationalHistory(historyStore).WithActionHistory(actionHistoryStore).WithActionHistoryReader(actionHistoryStore).WithActionLimiter(actioncontrol.New(time.Second))
 	setupComplete, err := settingsStore.IsSetupComplete()
 	if err != nil {
 		return fmt.Errorf("determine setup status: %w", err)
