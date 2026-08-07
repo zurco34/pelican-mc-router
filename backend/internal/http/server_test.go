@@ -390,6 +390,24 @@ func TestDashboardManualReconcile(t *testing.T) {
 	}
 }
 
+func TestDashboardManualReconcileUnavailableUsesJSONError(t *testing.T) {
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("content type = %q, want application/json", got)
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&body); err != nil || body.Error == "" {
+		t.Fatalf("response = %q, decode error = %v", recorder.Body.String(), err)
+	}
+}
+
 type testReconciliationResponse struct {
 	InProgress          bool    `json:"in_progress"`
 	LastOutcome         *string `json:"last_outcome"`

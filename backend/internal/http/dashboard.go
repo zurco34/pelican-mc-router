@@ -83,7 +83,7 @@ type manualReconcileResponse struct {
 
 func (s *Server) reconcileDashboard(w http.ResponseWriter, r *http.Request) {
 	if s.dashboardRefresh == nil || s.dashboardAuth == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "manual reconciliation not found")
 		return
 	}
 	if !s.allowAction(w, r, actioncontrol.ActionReconcile) {
