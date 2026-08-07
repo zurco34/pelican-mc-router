@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -15,6 +16,7 @@ var (
 )
 
 type stubSettingsStore struct {
+	mu               sync.Mutex
 	saved            settings.Settings
 	staged           settings.Settings
 	saveErr          error
@@ -24,6 +26,8 @@ type stubSettingsStore struct {
 }
 
 func (s *stubSettingsStore) StageSetup(value settings.Settings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.saveErr != nil {
 		return s.saveErr
 	}
@@ -32,22 +36,29 @@ func (s *stubSettingsStore) StageSetup(value settings.Settings) error {
 }
 
 func (s *stubSettingsStore) PromotePendingSetup() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.promoteErr != nil {
 		return s.promoteErr
 	}
 	s.saved = s.staged
+	s.setupComplete = true
 	return nil
 }
 
 func (s *stubSettingsStore) Save(
 	value settings.Settings,
 ) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.saved = value
 
 	return s.saveErr
 }
 
 func (s *stubSettingsStore) IsSetupComplete() (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.setupComplete, s.setupCompleteErr
 }
 
@@ -95,6 +106,37 @@ func (s *stubCandidateActivator) Activate(_ context.Context, _ settings.Settings
 	return nil
 }
 
+func (s *stubCandidateActivator) ActivateSetup(ctx context.Context, value settings.Settings, stage, promote func() error) error {
+	if err := stage(); err != nil {
+		return err
+	}
+	return s.Activate(ctx, value, promote)
+}
+
+type serialSetupActivator struct {
+	mu      sync.Mutex
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*serialSetupActivator) Refresh(context.Context) error { return nil }
+func (s *serialSetupActivator) Activate(context.Context, settings.Settings, func() error) error {
+	return nil
+}
+func (s *serialSetupActivator) ActivateSetup(_ context.Context, _ settings.Settings, stage, promote func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := stage(); err != nil {
+		return err
+	}
+	select {
+	case s.entered <- struct{}{}:
+	default:
+	}
+	<-s.release
+	return promote()
+}
+
 func (s *stubRuntimeRefresher) Refresh(context.Context) error {
 	s.called = true
 	return s.err
@@ -119,6 +161,28 @@ func TestNewService(t *testing.T) {
 	}
 }
 func TestServiceSetup(t *testing.T) {
+	t.Run("serializes concurrent pending candidates", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		activator := &serialSetupActivator{entered: make(chan struct{}, 1), release: make(chan struct{})}
+		service := NewService(store, &stubPelicanValidator{}, activator)
+		first := make(chan error, 1)
+		second := make(chan error, 1)
+		candidateA := settings.Settings{PelicanURL: "https://panel-a.example", PelicanAPIKey: "key-a", RouterDomain: "a.example"}
+		candidateB := settings.Settings{PelicanURL: "https://panel-b.example", PelicanAPIKey: "key-b", RouterDomain: "b.example"}
+		go func() { first <- service.Setup(context.Background(), candidateA) }()
+		<-activator.entered
+		go func() { second <- service.Setup(context.Background(), candidateB) }()
+		close(activator.release)
+		if err := <-first; err != nil {
+			t.Fatalf("first Setup() error = %v", err)
+		}
+		if err := <-second; !errors.Is(err, ErrAlreadyConfigured) {
+			t.Fatalf("second Setup() error = %v, want ErrAlreadyConfigured", err)
+		}
+		if store.saved.RouterDomain != candidateA.RouterDomain {
+			t.Fatalf("saved candidate = %q, want %q", store.saved.RouterDomain, candidateA.RouterDomain)
+		}
+	})
 	t.Run("does not persist or publish when candidate activation fails", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		activator := &stubCandidateActivator{err: errRefreshFailed}

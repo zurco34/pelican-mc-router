@@ -179,6 +179,24 @@ func (r *RefreshTask) Activate(ctx context.Context, value settings.Settings, per
 		return err
 	}
 	defer r.release()
+	return r.activateLocked(ctx, value, persist)
+}
+
+// ActivateSetup keeps staging, reconciliation, promotion, and publication
+// under one activation owner so a second setup request cannot replace a
+// singleton pending candidate before the first request promotes it.
+func (r *RefreshTask) ActivateSetup(ctx context.Context, value settings.Settings, stage, promote func() error) error {
+	if err := r.acquire(ctx); err != nil {
+		return err
+	}
+	defer r.release()
+	if err := stage(); err != nil {
+		return fmt.Errorf("stage candidate setup: %w", err)
+	}
+	return r.activateLocked(ctx, value, promote)
+}
+
+func (r *RefreshTask) activateLocked(ctx context.Context, value settings.Settings, persist func() error) error {
 	previous := r.manager.Routing()
 	discoveryService, routingService, err := r.buildRuntimeServicesFor(value)
 	if err != nil {

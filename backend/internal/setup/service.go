@@ -38,6 +38,10 @@ type CandidateRuntimeActivator interface {
 	Activate(context.Context, settings.Settings, func() error) error
 }
 
+type SetupRuntimeActivator interface {
+	ActivateSetup(context.Context, settings.Settings, func() error, func() error) error
+}
+
 type SecretResolver interface{ Resolve(string) ([]byte, error) }
 
 type Service struct {
@@ -121,20 +125,30 @@ func (s *Service) Setup(
 	if err := s.validate(ctx, &input); err != nil {
 		return err
 	}
-	if err := s.store.StageSetup(input); err != nil {
-		return fmt.Errorf("stage setup: %w", err)
-	}
 	if s.refresher == nil {
+		if err := s.store.StageSetup(input); err != nil {
+			return fmt.Errorf("stage setup: %w", err)
+		}
 		if err := s.store.PromotePendingSetup(); err != nil {
 			return fmt.Errorf("promote setup: %w", err)
 		}
 		return nil
 	}
-	activator, ok := s.refresher.(CandidateRuntimeActivator)
+	activator, ok := s.refresher.(SetupRuntimeActivator)
 	if !ok {
-		return errors.New("setup: candidate runtime activation is unavailable")
+		return errors.New("setup: setup runtime activation is unavailable")
 	}
-	if err := activator.Activate(ctx, input, s.store.PromotePendingSetup); err != nil {
+	stage := func() error {
+		complete, err := s.store.IsSetupComplete()
+		if err != nil {
+			return fmt.Errorf("determine setup status: %w", err)
+		}
+		if complete {
+			return ErrAlreadyConfigured
+		}
+		return s.store.StageSetup(input)
+	}
+	if err := activator.ActivateSetup(ctx, input, stage, s.store.PromotePendingSetup); err != nil {
 		return fmt.Errorf("activate candidate runtime: %w", err)
 	}
 	return nil
