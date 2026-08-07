@@ -95,6 +95,13 @@ func (s *stubCandidateActivator) Activate(_ context.Context, _ settings.Settings
 	return nil
 }
 
+func (s *stubCandidateActivator) ActivateSetup(ctx context.Context, value settings.Settings, stage, promote func() error) error {
+	if err := stage(); err != nil {
+		return err
+	}
+	return s.Activate(ctx, value, promote)
+}
+
 func (s *stubRuntimeRefresher) Refresh(context.Context) error {
 	s.called = true
 	return s.err
