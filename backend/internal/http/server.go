@@ -205,11 +205,13 @@ func (s *Server) listActionHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "action history unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+	writeJSON(w, http.StatusOK, struct {
+		Events []actionEventResponse `json:"events"`
+	}{Events: actionEventsResponse(events)})
 }
 
 type operationalHistoryResponse struct {
-	Events []operationalhistory.Event `json:"events"`
+	Events []operationalEventResponse `json:"events"`
 }
 
 func (s *Server) listOperationalHistory(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +233,7 @@ func (s *Server) listOperationalHistory(w http.ResponseWriter, r *http.Request) 
 		writeJSONError(w, http.StatusServiceUnavailable, "operational history unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, operationalHistoryResponse{Events: events})
+	writeJSON(w, http.StatusOK, operationalHistoryResponse{Events: operationalEventsResponse(events)})
 }
 
 type routePolicyRequest struct {
@@ -252,7 +254,9 @@ func (s *Server) listRoutePolicies(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "route policies unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"policies": policies})
+	writeJSON(w, http.StatusOK, struct {
+		Policies []routePolicyResponse `json:"policies"`
+	}{Policies: routePoliciesResponse(policies)})
 }
 
 func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +277,7 @@ func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
 		return
 	}
-	writeJSON(w, http.StatusCreated, policy)
+	writeJSON(w, http.StatusCreated, routePolicyResponseFor(policy))
 }
 
 func (s *Server) updateRoutePolicy(w http.ResponseWriter, r *http.Request) {
@@ -336,7 +340,7 @@ func (s *Server) writeRoutePolicyResult(w http.ResponseWriter, policy routepolic
 		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, policy)
+	writeJSON(w, http.StatusOK, routePolicyResponseFor(policy))
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, value any) bool {
