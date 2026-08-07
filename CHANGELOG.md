@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.3 - 2026-08-07
+
+### Fixed
+
+- Candidate activation now compensates failed or canceled route synchronization
+  before releasing the serialized runtime owner lock.
+- `/api/v1/status` now returns the documented sanitized `503` response when
+  setup state is unavailable.
+
+### Added
+
+- Explicit bounded OpenAPI schemas and route-contract checks for operation IDs.
+- Bounded authenticated sensitive-action history at `/api/v1/action-history`.
+
+### Changed
+
+- Recovery instructions resolve the actual Compose database volume and stable
+  deployment guidance documents owner-only file-backed secret mounts.
+
+### Upgrade notes
+
+- Back up the SQLite volume before upgrade. v1.0.2 remains the immediate
+  rollback image only while the database schema remains compatible.
+
 ## 1.0.2 - 2026-08-07
 
 ### Fixed
