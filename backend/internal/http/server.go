@@ -485,7 +485,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	setupCompleted, err := s.setup.IsSetupComplete(r.Context())
 	if err != nil {
 		slog.Error("get application status", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to get application status")
+		writeJSONError(w, http.StatusServiceUnavailable, "application status unavailable")
 		return
 	}
 
