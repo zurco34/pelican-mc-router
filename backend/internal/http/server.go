@@ -63,6 +63,10 @@ type OperationalHistoryStore interface {
 	List(context.Context, int) ([]operationalhistory.Event, error)
 }
 
+type ActionHistoryStore interface {
+	List(context.Context, int) ([]actionhistory.Event, error)
+}
+
 type setupRequest struct {
 	PelicanURL        string `json:"pelican_url"`
 	PelicanSecretName string `json:"pelican_secret_name"`
@@ -84,6 +88,7 @@ type Server struct {
 	actionLimiter        *actioncontrol.Limiter
 	routePolicies        RoutePolicyStore
 	operationalHistory   OperationalHistoryStore
+	actionHistoryReader  ActionHistoryStore
 	actionHistory        interface {
 		Append(context.Context, actionhistory.Event) error
 	}
@@ -158,6 +163,7 @@ func (s *Server) Router() http.Handler {
 	router.Get("/api/v1/routes/preview", s.managementViewer(s.previewRoutes))
 	router.Get("/api/v1/route-policies", s.managementViewer(s.listRoutePolicies))
 	router.Get("/api/v1/operational-history", s.managementViewer(s.listOperationalHistory))
+	router.Get("/api/v1/action-history", s.managementViewer(s.listActionHistory))
 	router.Post("/api/v1/route-policies", s.managementOperator(s.createRoutePolicy))
 	router.Put("/api/v1/route-policies/{serverUUID}", s.managementOperator(s.updateRoutePolicy))
 	router.Delete("/api/v1/route-policies/{serverUUID}", s.managementOperator(s.deleteRoutePolicy))
@@ -173,6 +179,33 @@ func (s *Server) WithRoutePolicies(store RoutePolicyStore) *Server { s.routePoli
 func (s *Server) WithOperationalHistory(store OperationalHistoryStore) *Server {
 	s.operationalHistory = store
 	return s
+}
+
+func (s *Server) WithActionHistoryReader(store ActionHistoryStore) *Server {
+	s.actionHistoryReader = store
+	return s
+}
+
+func (s *Server) listActionHistory(w http.ResponseWriter, r *http.Request) {
+	if s.actionHistoryReader == nil {
+		http.NotFound(w, r)
+		return
+	}
+	limit := operationalhistory.MaxPageSize
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > operationalhistory.MaxPageSize {
+			writeJSONError(w, http.StatusBadRequest, "invalid history limit")
+			return
+		}
+		limit = value
+	}
+	events, err := s.actionHistoryReader.List(r.Context(), limit)
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "action history unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
 
 type operationalHistoryResponse struct {
