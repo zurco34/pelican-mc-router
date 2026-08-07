@@ -418,7 +418,7 @@ func TestStatusEndpoint(t *testing.T) {
 		{"success", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{LastOutcome: &success, LastStartedAt: &started, LastCompletedAt: &completed, LastSuccessAt: &completed, LastDurationMS: 125}, http.StatusOK, true, "ready"},
 		{"success in progress", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{InProgress: true, LastOutcome: &success, LastStartedAt: &completed, LastCompletedAt: &completed, LastSuccessAt: &completed}, http.StatusOK, true, "ready"},
 		{"failure", &fakeSetupService{completed: true}, runtime.ReconciliationStatus{LastOutcome: &failure, LastStartedAt: &started, LastCompletedAt: &completed, LastSuccessAt: &started, LastDurationMS: 125, ConsecutiveFailures: 2, LastError: &sanitized}, http.StatusOK, false, "reconciliation_failed"},
-		{"setup error", &fakeSetupService{err: errors.New("https://secret.example/api-key")}, runtime.ReconciliationStatus{}, http.StatusInternalServerError, false, ""},
+		{"setup error", &fakeSetupService{err: errors.New("https://secret.example/api-key")}, runtime.ReconciliationStatus{}, http.StatusServiceUnavailable, false, ""},
 	}
 
 	for _, test := range tests {
@@ -439,7 +439,7 @@ func TestStatusEndpoint(t *testing.T) {
 					Error string `json:"error"`
 				}
 				decodeStrictJSON(t, raw, &body)
-				if body.Error != "failed to get application status" {
+				if body.Error != "application status unavailable" {
 					t.Fatalf("error = %q", body.Error)
 				}
 				return
