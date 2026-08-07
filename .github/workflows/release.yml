@@ -90,12 +90,13 @@ jobs:
             exit 1
           fi
 
-          if ! git merge-base --is-ancestor \
-            "${GITHUB_SHA}" \
-            "origin/main"; then
+          readonly main_head="$(git rev-parse origin/main)"
+
+          if [[ "${GITHUB_SHA}" != "${main_head}" ]]; then
             printf \
-              'Tagged commit %s is not contained in origin/main.\n' \
+              'Tagged commit %s does not match current origin/main head %s.\n' \
               "${GITHUB_SHA}" \
+              "${main_head}" \
               >&2
 
             exit 1
