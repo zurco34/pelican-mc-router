@@ -650,7 +650,7 @@ func TestListServers(t *testing.T) {
 		Servers []models.MinecraftServer `json:"servers"`
 	}
 
-	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -681,6 +681,11 @@ func TestListServers(t *testing.T) {
 			got.AllocationID,
 		)
 	}
+	var raw map[string][]map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	assertJSONKeys(t, raw["servers"][0], "id", "uuid", "identifier", "name", "node_id", "egg_id", "allocation_id", "backend_ip", "backend_port", "suspended", "status")
 }
 
 func TestListServersReturnsInternalServerError(t *testing.T) {
@@ -803,7 +808,7 @@ func TestListRoutes(t *testing.T) {
 		Routes []routing.Route `json:"routes"`
 	}
 
-	if err := json.NewDecoder(recorder.Body).
+	if err := json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).
 		Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -847,6 +852,28 @@ func TestListRoutes(t *testing.T) {
 			got.Backend.Port,
 			25565,
 		)
+	}
+	var raw map[string][]map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	assertJSONKeys(t, raw["routes"][0], "server_id", "hostname", "backend")
+	var backend map[string]json.RawMessage
+	if err := json.Unmarshal(raw["routes"][0]["backend"], &backend); err != nil {
+		t.Fatalf("decode backend: %v", err)
+	}
+	assertJSONKeys(t, backend, "host", "port")
+}
+
+func assertJSONKeys(t *testing.T, value map[string]json.RawMessage, want ...string) {
+	t.Helper()
+	if len(value) != len(want) {
+		t.Fatalf("JSON keys = %v, want %v", value, want)
+	}
+	for _, key := range want {
+		if _, ok := value[key]; !ok {
+			t.Fatalf("JSON keys = %v, missing %q", value, key)
+		}
 	}
 }
 
