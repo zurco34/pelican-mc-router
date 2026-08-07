@@ -258,65 +258,84 @@ func (s *Server) listRoutePolicies(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	var request routePolicyRequest
 	if !decodeJSON(w, r, &request) {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		return
 	}
 	policy, err := s.routePolicies.Create(r.Context(), routepolicy.Policy{ServerUUID: request.ServerUUID, PrimaryHostname: request.PrimaryHostname, Aliases: request.Aliases, Excluded: request.Excluded})
 	if errors.Is(err, routepolicy.ErrInvalid) {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
 		return
 	}
 	if err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, outcomeForError(err))
 		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
 		return
 	}
+	s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeSuccess)
 	writeJSON(w, http.StatusCreated, routePolicyResponseFor(policy))
 }
 
 func (s *Server) updateRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	var request routePolicyRequest
 	if !decodeJSON(w, r, &request) {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		return
 	}
 	policy, err := s.routePolicies.Update(r.Context(), routepolicy.Policy{ServerUUID: chi.URLParam(r, "serverUUID"), PrimaryHostname: request.PrimaryHostname, Aliases: request.Aliases, Excluded: request.Excluded}, request.Revision)
+	if err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, outcomeForError(err))
+	} else {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeSuccess)
+	}
 	s.writeRoutePolicyResult(w, policy, err)
 }
 
 func (s *Server) deleteRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	revision, err := strconv.ParseInt(r.URL.Query().Get("revision"), 10, 64)
 	if err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusBadRequest, "invalid route policy revision")
 		return
 	}
 	err = s.routePolicies.Delete(r.Context(), chi.URLParam(r, "serverUUID"), revision)
 	if errors.Is(err, routepolicy.ErrNotFound) {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusNotFound, "route policy not found")
 		return
 	}
 	if errors.Is(err, routepolicy.ErrConflict) {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusConflict, "route policy conflict")
 		return
 	}
 	if errors.Is(err, routepolicy.ErrInvalid) {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
 		return
 	}
 	if err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, outcomeForError(err))
 		writeJSONError(w, http.StatusServiceUnavailable, "route policy unavailable")
 		return
 	}
+	s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeSuccess)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -364,6 +383,7 @@ func (s *Server) bootstrapOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		completed, err := s.setup.IsSetupComplete(r.Context())
 		if err != nil {
+			s.recordAction(r.Context(), actionhistory.ActionBootstrap, actionhistory.OutcomeFailure)
 			writeJSONError(w, http.StatusServiceUnavailable, "setup status unavailable")
 			return
 		}
@@ -713,6 +733,7 @@ func (s *Server) configureSetup(
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&request); err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionSetup, actionhistory.OutcomeFailure)
 		writeJSONError(
 			w,
 			http.StatusBadRequest,
@@ -725,6 +746,7 @@ func (s *Server) configureSetup(
 	var trailing any
 
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		s.recordAction(r.Context(), actionhistory.ActionSetup, actionhistory.OutcomeFailure)
 		writeJSONError(
 			w,
 			http.StatusBadRequest,
@@ -734,6 +756,7 @@ func (s *Server) configureSetup(
 		return
 	}
 	if !secretfile.ValidName(strings.TrimSpace(request.PelicanSecretName)) {
+		s.recordAction(r.Context(), actionhistory.ActionSetup, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusBadRequest, "invalid Pelican credential reference")
 		return
 	}
@@ -780,6 +803,7 @@ func (s *Server) updateSettings(
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&request); err != nil {
+		s.recordAction(r.Context(), actionhistory.ActionSettings, actionhistory.OutcomeFailure)
 		writeJSONError(
 			w,
 			http.StatusBadRequest,
@@ -792,6 +816,7 @@ func (s *Server) updateSettings(
 	var trailing any
 
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		s.recordAction(r.Context(), actionhistory.ActionSettings, actionhistory.OutcomeFailure)
 		writeJSONError(
 			w,
 			http.StatusBadRequest,
@@ -801,6 +826,7 @@ func (s *Server) updateSettings(
 		return
 	}
 	if !secretfile.ValidName(strings.TrimSpace(request.PelicanSecretName)) {
+		s.recordAction(r.Context(), actionhistory.ActionSettings, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusBadRequest, "invalid Pelican credential reference")
 		return
 	}
