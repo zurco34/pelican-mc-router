@@ -17,7 +17,6 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
 	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
-	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/secretfile"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -519,10 +518,7 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	completed, err := s.setup.IsSetupComplete(r.Context())
 	if err != nil {
 		slog.Error("get readiness", "error", err)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ready":  false,
-			"reason": "status_unavailable",
-		})
+		writeJSON(w, http.StatusServiceUnavailable, readinessResponse{Ready: false, Reason: "status_unavailable"})
 		return
 	}
 	result := readinessFor(completed, s.reconciliationStatus.Snapshot())
@@ -532,10 +528,7 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusOK
 	}
 
-	writeJSON(w, statusCode, map[string]any{
-		"ready":  result.Ready,
-		"reason": result.Reason,
-	})
+	writeJSON(w, statusCode, readinessResponse{Ready: result.Ready, Reason: result.Reason})
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
@@ -632,9 +625,7 @@ func (s *Server) listServers(
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"servers": servers,
-	})
+	writeJSON(w, http.StatusOK, serversResponse{Servers: serversResponseFor(servers)})
 }
 
 func (s *Server) listRoutes(
@@ -660,14 +651,12 @@ func (s *Server) listRoutes(
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"routes": routes,
-	})
+	writeJSON(w, http.StatusOK, routesResponse{Routes: routesResponseFor(routes)})
 }
 
 type routePreviewResponse struct {
 	Desired int             `json:"desired"`
-	Routes  []routing.Route `json:"routes"`
+	Routes  []routeResponse `json:"routes"`
 }
 
 // previewRoutes returns the cached inventory's planner output. The runtime
@@ -692,7 +681,7 @@ func (s *Server) previewRoutes(
 
 	writeJSON(w, http.StatusOK, routePreviewResponse{
 		Desired: len(routes),
-		Routes:  routes,
+		Routes:  routesResponseFor(routes),
 	})
 }
 
@@ -713,9 +702,7 @@ func (s *Server) getSetupStatus(
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"completed": completed,
-	})
+	writeJSON(w, http.StatusOK, setupStatusResponse{Completed: completed})
 }
 
 func (s *Server) configureSetup(
