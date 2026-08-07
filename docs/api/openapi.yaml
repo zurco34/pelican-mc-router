@@ -46,7 +46,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/HistoryLimit'}]
       responses: {'200': {$ref: '#/components/responses/ActionHistory'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/v1/dashboard/reconcile:
-    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '408': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
+    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '408': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/settings:
     put: {operationId: updateSettings, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SettingsRequest'}}}}, responses: {'204': {description: Settings activated}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}}}
   /api/v1/route-policies:

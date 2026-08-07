@@ -108,3 +108,21 @@ func TestOpenAPIOperationalResponseConformance(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAPIManualReconcileUnavailableResponse(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile(filepath.Join("..", "..", "..", "docs", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil))
+	if recorder.Code != http.StatusNotFound || !strings.HasPrefix(recorder.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("status/content type = %d/%q, want 404/application/json", recorder.Code, recorder.Header().Get("Content-Type"))
+	}
+	operation := document.Paths.Find("/api/v1/dashboard/reconcile").GetOperation(http.MethodPost)
+	if operation.Responses.Value(strconv.Itoa(http.StatusNotFound)) == nil {
+		t.Fatal("OpenAPI manual reconciliation 404 response is missing")
+	}
+}
