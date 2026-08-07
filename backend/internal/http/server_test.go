@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zurco34/pelican-mc-router/internal/actionhistory"
 	"github.com/zurco34/pelican-mc-router/internal/dashboard"
 	"github.com/zurco34/pelican-mc-router/internal/dashboardauth"
 	"github.com/zurco34/pelican-mc-router/internal/observability"
 	"github.com/zurco34/pelican-mc-router/internal/operationalhistory"
+	"github.com/zurco34/pelican-mc-router/internal/routepolicy"
 	routing "github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/runtime"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
@@ -56,6 +58,43 @@ type fakeOperationalHistoryStore struct {
 	err    error
 	limit  int
 }
+
+type fakeActionHistoryWriter struct {
+	events []actionhistory.Event
+	err    error
+}
+
+func (f *fakeActionHistoryWriter) Append(_ context.Context, event actionhistory.Event) error {
+	f.events = append(f.events, event)
+	return f.err
+}
+
+type fakeRoutePolicyStore struct {
+	policy routepolicy.Policy
+	err    error
+}
+
+func (f *fakeRoutePolicyStore) List(context.Context) ([]routepolicy.Policy, error) {
+	return nil, f.err
+}
+
+func (f *fakeRoutePolicyStore) Create(_ context.Context, policy routepolicy.Policy) (routepolicy.Policy, error) {
+	if f.err != nil {
+		return routepolicy.Policy{}, f.err
+	}
+	f.policy = policy
+	return policy, nil
+}
+
+func (f *fakeRoutePolicyStore) Update(_ context.Context, policy routepolicy.Policy, _ int64) (routepolicy.Policy, error) {
+	if f.err != nil {
+		return routepolicy.Policy{}, f.err
+	}
+	f.policy = policy
+	return policy, nil
+}
+
+func (f *fakeRoutePolicyStore) Delete(context.Context, string, int64) error { return f.err }
 
 func (f *fakeOperationalHistoryStore) List(_ context.Context, limit int) ([]operationalhistory.Event, error) {
 	f.limit = limit
@@ -1602,5 +1641,93 @@ func TestOperationalHistoryEndpointIsBoundedAndSafe(t *testing.T) {
 	server.Router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("invalid limit status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRoutePolicyActionsAreRecordedWithFixedOutcomes(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler func(*Server, http.ResponseWriter, *http.Request)
+		request *http.Request
+		store   *fakeRoutePolicyStore
+		want    actionhistory.Outcome
+	}{
+		{
+			name: "create success",
+			handler: func(server *Server, w http.ResponseWriter, r *http.Request) {
+				server.createRoutePolicy(w, r)
+			},
+			request: httptest.NewRequest(http.MethodPost, "/api/v1/route-policies", strings.NewReader(`{"server_uuid":"server","primary_hostname":"play.example.test"}`)),
+			store:   &fakeRoutePolicyStore{},
+			want:    actionhistory.OutcomeSuccess,
+		},
+		{
+			name: "create failure",
+			handler: func(server *Server, w http.ResponseWriter, r *http.Request) {
+				server.createRoutePolicy(w, r)
+			},
+			request: httptest.NewRequest(http.MethodPost, "/api/v1/route-policies", strings.NewReader(`{"server_uuid":"server"}`)),
+			store:   &fakeRoutePolicyStore{err: errors.New("store unavailable")},
+			want:    actionhistory.OutcomeFailure,
+		},
+		{
+			name: "update cancellation",
+			handler: func(server *Server, w http.ResponseWriter, r *http.Request) {
+				server.updateRoutePolicy(w, r)
+			},
+			request: httptest.NewRequest(http.MethodPut, "/api/v1/route-policies/server", strings.NewReader(`{"revision":1}`)),
+			store:   &fakeRoutePolicyStore{err: context.Canceled},
+			want:    actionhistory.OutcomeCanceled,
+		},
+		{
+			name: "delete success",
+			handler: func(server *Server, w http.ResponseWriter, r *http.Request) {
+				server.deleteRoutePolicy(w, r)
+			},
+			request: httptest.NewRequest(http.MethodDelete, "/api/v1/route-policies/server?revision=1", nil),
+			store:   &fakeRoutePolicyStore{},
+			want:    actionhistory.OutcomeSuccess,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			writer := &fakeActionHistoryWriter{}
+			server := newTestServer(&fakeDiscoveryService{}, &fakeRoutingService{}, &fakeSetupService{}).
+				WithRoutePolicies(test.store).
+				WithActionHistory(writer)
+			test.handler(server, httptest.NewRecorder(), test.request)
+			if len(writer.events) != 1 {
+				t.Fatalf("recorded events = %#v, want one", writer.events)
+			}
+			event := writer.events[0]
+			if event.Action != actionhistory.ActionRoutePolicy || event.Outcome != test.want {
+				t.Fatalf("recorded event = %#v, want route policy/%s", event, test.want)
+			}
+		})
+	}
+}
+
+func TestSetupAndSettingsFailuresAreRecordedWithoutChangingResponse(t *testing.T) {
+	for _, path := range []string{"/api/v1/setup", "/api/v1/settings"} {
+		t.Run(path, func(t *testing.T) {
+			writer := &fakeActionHistoryWriter{err: errors.New("history unavailable")}
+			server := newTestServer(&fakeDiscoveryService{}, &fakeRoutingService{}, &fakeSetupService{}).WithActionHistory(writer)
+			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"unknown":true}`))
+			recorder := httptest.NewRecorder()
+			if path == "/api/v1/setup" {
+				server.configureSetup(recorder, request)
+			} else {
+				server.updateSettings(recorder, request)
+			}
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+			}
+			if len(writer.events) != 1 {
+				t.Fatalf("recorded events = %#v, want one", writer.events)
+			}
+			if writer.events[0].Outcome != actionhistory.OutcomeFailure {
+				t.Fatalf("outcome = %s, want failure", writer.events[0].Outcome)
+			}
+		})
 	}
 }
