@@ -20,8 +20,8 @@ var ErrSetupNotActive = errors.New("setup: setup has not been completed")
 type SettingsStore interface {
 	IsSetupComplete() (bool, error)
 	Save(settings.Settings) error
-	StageSetup(settings.Settings) error
-	PromotePendingSetup() error
+	StageSetup(settings.Settings) (string, error)
+	PromotePendingSetup(string) error
 }
 
 type PelicanValidator interface {
@@ -41,7 +41,7 @@ type CandidateRuntimeActivator interface {
 }
 
 type SetupRuntimeActivator interface {
-	ActivateSetup(context.Context, settings.Settings, func() error, func() error) error
+	ActivateSetup(context.Context, settings.Settings, func() (string, error), func(string) error) error
 }
 
 type SecretResolver interface{ Resolve(string) ([]byte, error) }
@@ -128,10 +128,11 @@ func (s *Service) Setup(
 		return err
 	}
 	if s.refresher == nil {
-		if err := s.store.StageSetup(input); err != nil {
+		generation, err := s.store.StageSetup(input)
+		if err != nil {
 			return fmt.Errorf("stage setup: %w", err)
 		}
-		if err := s.store.PromotePendingSetup(); err != nil {
+		if err := s.store.PromotePendingSetup(generation); err != nil {
 			return fmt.Errorf("promote setup: %w", err)
 		}
 		return nil
@@ -140,13 +141,13 @@ func (s *Service) Setup(
 	if !ok {
 		return errors.New("setup: setup runtime activation is unavailable")
 	}
-	stage := func() error {
+	stage := func() (string, error) {
 		complete, err := s.store.IsSetupComplete()
 		if err != nil {
-			return fmt.Errorf("determine setup status: %w", err)
+			return "", fmt.Errorf("determine setup status: %w", err)
 		}
 		if complete {
-			return ErrAlreadyConfigured
+			return "", ErrAlreadyConfigured
 		}
 		return s.store.StageSetup(input)
 	}
