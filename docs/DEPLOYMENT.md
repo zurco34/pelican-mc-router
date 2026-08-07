@@ -97,7 +97,7 @@ PELICAN_MC_ROUTER_SECRETS_BOOTSTRAP_TOKEN_NAME=bootstrap-token
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.1
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.3
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -242,6 +242,8 @@ umask 077
 cat > ./secrets/pelican-api-key
 # paste the panel-issued Application API key, then press Ctrl-D
 openssl rand -base64 48 > ./secrets/bootstrap-token
+chown 10001:10001 ./secrets/pelican-api-key ./secrets/bootstrap-token
+chmod 600 ./secrets/pelican-api-key ./secrets/bootstrap-token
 ```
 
 Submit the initial setup:
@@ -367,7 +369,7 @@ test -n "$volume_name"
 docker compose stop pelican-mc-router
 docker run --rm --entrypoint sqlite-recovery \
   -v "$volume_name:/data:ro" \
-  ghcr.io/zurco34/pelican-mc-router:1.0.2 \
+  ghcr.io/zurco34/pelican-mc-router:1.0.3 \
   -operation integrity -source /data/pelican-mc-router.db
 
 # Mount a separate writable, operator-protected backup directory for backup or
@@ -497,7 +499,7 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.1
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.3
 ```
 
 Change the tag to the exact release being installed.
