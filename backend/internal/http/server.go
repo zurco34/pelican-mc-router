@@ -880,6 +880,9 @@ func writeSetupError(
 			"router domain is required",
 		)
 
+	case errors.Is(err, setup.ErrSetupNotActive):
+		writeJSONError(w, http.StatusConflict, "setup has not been completed")
+
 	default:
 		return false
 	}

@@ -315,7 +315,7 @@ func TestServiceSetup(t *testing.T) {
 	})
 
 	t.Run("updates settings and refreshes runtime", func(t *testing.T) {
-		store := &stubSettingsStore{}
+		store := &stubSettingsStore{setupComplete: true}
 		validator := &stubPelicanValidator{}
 		refresher := &stubCandidateActivator{}
 
@@ -355,7 +355,7 @@ func TestServiceSetup(t *testing.T) {
 
 	t.Run("returns an error when updating settings fails", func(t *testing.T) {
 		store := &stubSettingsStore{
-			saveErr: errSaveFailed,
+			saveErr: errSaveFailed, setupComplete: true,
 		}
 		validator := &stubPelicanValidator{}
 
@@ -375,6 +375,20 @@ func TestServiceSetup(t *testing.T) {
 				"Update() error = %v, want errors.Is(error, errSaveFailed)",
 				err,
 			)
+		}
+	})
+
+	t.Run("rejects update before setup without validation", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		validator := &stubPelicanValidator{}
+		refresher := &stubCandidateActivator{}
+		service := NewService(store, validator, refresher)
+		err := service.Update(context.Background(), settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"})
+		if !errors.Is(err, ErrSetupNotActive) {
+			t.Fatalf("Update() error = %v", err)
+		}
+		if validator.called || refresher.prepared || store.saved != (settings.Settings{}) {
+			t.Fatal("inactive update performed work")
 		}
 	})
 

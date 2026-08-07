@@ -15,6 +15,8 @@ var ErrAlreadyConfigured = errors.New(
 	"setup: setup has already been completed",
 )
 
+var ErrSetupNotActive = errors.New("setup: setup has not been completed")
+
 type SettingsStore interface {
 	IsSetupComplete() (bool, error)
 	Save(settings.Settings) error
@@ -184,5 +186,12 @@ func (s *Service) Update(
 	ctx context.Context,
 	input settings.Settings,
 ) error {
+	complete, err := s.store.IsSetupComplete()
+	if err != nil {
+		return fmt.Errorf("setup: determine setup status: %w", err)
+	}
+	if !complete {
+		return ErrSetupNotActive
+	}
 	return s.prepareAndPublish(ctx, input, s.store.Save)
 }
