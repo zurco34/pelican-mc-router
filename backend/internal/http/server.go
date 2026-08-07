@@ -101,12 +101,9 @@ func (s *Server) WithActionHistory(store interface {
 	return s
 }
 
-func (s *Server) recordAction(ctx context.Context, action actionhistory.Action, outcome actionhistory.Outcome) {
+func (s *Server) recordAction(_ context.Context, action actionhistory.Action, outcome actionhistory.Outcome) {
 	if s.actionHistory != nil {
-		if ctx.Err() != nil {
-			ctx = context.Background()
-		}
-		bounded, cancel := context.WithTimeout(ctx, time.Second)
+		bounded, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		if err := s.actionHistory.Append(bounded, actionhistory.Event{Action: action, Outcome: outcome}); err != nil {
 			slog.Warn("record sensitive action history failed")
@@ -375,13 +372,16 @@ func (s *Server) bootstrapOnly(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if s.bootstrapAuth == nil {
+			s.recordAction(r.Context(), actionhistory.ActionBootstrap, actionhistory.OutcomeFailure)
 			writeJSONError(w, http.StatusServiceUnavailable, "bootstrap authentication unavailable")
 			return
 		}
 		if err := s.bootstrapAuth.Authorize(r); err != nil {
+			s.recordAction(r.Context(), actionhistory.ActionBootstrap, actionhistory.OutcomeDenied)
 			writeJSONError(w, http.StatusUnauthorized, "bootstrap authentication required")
 			return
 		}
+		s.recordAction(r.Context(), actionhistory.ActionBootstrap, actionhistory.OutcomeSuccess)
 		next(w, r)
 	}
 }
