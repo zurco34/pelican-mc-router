@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -70,5 +72,39 @@ func TestOpenAPIContractMatchesRegisteredRoutes(t *testing.T) {
 		if route != "GET /health" && route != "GET /ready" && route != "GET /metrics" && (operation.Security == nil || len(*operation.Security) == 0) {
 			t.Errorf("management route %s has no security requirement", route)
 		}
+	}
+}
+
+func TestOpenAPIOperationalResponseConformance(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile(filepath.Join("..", "..", "..", "docs", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatalf("load OpenAPI document: %v", err)
+	}
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	for _, test := range []struct {
+		method, path, contentType string
+		status                    int
+	}{
+		{http.MethodGet, "/health", "text/plain", http.StatusOK},
+		{http.MethodGet, "/ready", "application/json", http.StatusServiceUnavailable},
+	} {
+		t.Run(test.method+" "+test.path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(test.method, test.path, nil))
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.status)
+			}
+			if !strings.HasPrefix(recorder.Header().Get("Content-Type"), test.contentType) {
+				t.Fatalf("content type = %q", recorder.Header().Get("Content-Type"))
+			}
+			item := document.Paths.Find(test.path)
+			if item == nil || item.GetOperation(test.method) == nil {
+				t.Fatalf("OpenAPI operation missing")
+			}
+			if item.GetOperation(test.method).Responses.Value(strconv.Itoa(test.status)) == nil {
+				t.Fatalf("OpenAPI response %d missing", test.status)
+			}
+		})
 	}
 }
