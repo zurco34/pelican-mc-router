@@ -36,12 +36,25 @@ func TestOpenAPIContractMatchesRegisteredRoutes(t *testing.T) {
 	}
 
 	specified := map[string]*openapi3.Operation{}
+	operationIDs := map[string]string{}
 	for path, item := range document.Paths.Map() {
 		for method, operation := range item.Operations() {
 			method = strings.ToUpper(method)
 			specified[method+" "+path] = operation
 			if operation.OperationID == "" {
 				t.Errorf("%s %s has no operationId", method, path)
+			} else if previous, duplicate := operationIDs[operation.OperationID]; duplicate {
+				t.Errorf("operationId %q is duplicated by %s and %s %s", operation.OperationID, previous, method, path)
+			} else {
+				operationIDs[operation.OperationID] = method + " " + path
+			}
+			for _, parameter := range item.Parameters {
+				if parameter.Value == nil || parameter.Value.In != "path" || !strings.Contains(path, "{"+parameter.Value.Name+"}") {
+					continue
+				}
+				if !parameter.Value.Required {
+					t.Errorf("path parameter %q for %s %s is not required", parameter.Value.Name, method, path)
+				}
 			}
 		}
 	}
