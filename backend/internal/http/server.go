@@ -188,7 +188,7 @@ func (s *Server) WithActionHistoryReader(store ActionHistoryStore) *Server {
 
 func (s *Server) listActionHistory(w http.ResponseWriter, r *http.Request) {
 	if s.actionHistoryReader == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "action history not found")
 		return
 	}
 	limit := operationalhistory.MaxPageSize
@@ -216,7 +216,7 @@ type operationalHistoryResponse struct {
 
 func (s *Server) listOperationalHistory(w http.ResponseWriter, r *http.Request) {
 	if s.operationalHistory == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "operational history not found")
 		return
 	}
 	limit := operationalhistory.MaxPageSize
@@ -246,7 +246,7 @@ type routePolicyRequest struct {
 
 func (s *Server) listRoutePolicies(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	policies, err := s.routePolicies.List(r.Context())
@@ -261,7 +261,7 @@ func (s *Server) listRoutePolicies(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	var request routePolicyRequest
@@ -282,7 +282,7 @@ func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	var request routePolicyRequest
@@ -295,7 +295,7 @@ func (s *Server) updateRoutePolicy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.routePolicies == nil {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
 	revision, err := strconv.ParseInt(r.URL.Query().Get("revision"), 10, 64)
@@ -305,7 +305,7 @@ func (s *Server) deleteRoutePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	err = s.routePolicies.Delete(r.Context(), chi.URLParam(r, "serverUUID"), revision)
 	if errors.Is(err, routepolicy.ErrNotFound) {
-		http.NotFound(w, r)
+		writeJSONError(w, http.StatusNotFound, "route policy not found")
 		return
 	}
 	if errors.Is(err, routepolicy.ErrConflict) {
