@@ -357,12 +357,18 @@ or credentials. Create backups on storage protected by the operator and verify
 them before a restore:
 
 ```bash
+container_id="$(docker compose ps -q pelican-mc-router)"
+volume_name="$(docker inspect "$container_id" --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Name}}{{end}}{{end}}')"
+test -n "$volume_name"
+docker compose stop pelican-mc-router
 docker run --rm --entrypoint sqlite-recovery \
-  -v "$(docker volume inspect -f '{{ .Name }}' pelican-mc-router-data):/data:ro" ghcr.io/zurco34/pelican-mc-router:1.0.1 \
+  -v "$volume_name:/data:ro" \
+  ghcr.io/zurco34/pelican-mc-router:1.0.2 \
   -operation integrity -source /data/pelican-mc-router.db
 
-# Use a separate writable, operator-protected target mount for backup/restore.
-# Podman supports the same offline --entrypoint invocation.
+# Mount a separate writable, operator-protected backup directory for backup or
+# restore. Restore only into a new non-existent target, then verify integrity.
+# Resolve Podman Compose container mounts equivalently with `podman inspect`.
 ```
 
 Restore targets must be distinct and must not already exist. Replace the
