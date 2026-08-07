@@ -1,7 +1,9 @@
 package settings
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -91,37 +93,42 @@ func (s *Store) Save(value Settings) error {
 
 // StageSetup records a safe, retryable setup candidate. It intentionally does
 // not make the candidate active or mark setup as complete.
-func (s *Store) StageSetup(value Settings) error {
+func (s *Store) StageSetup(value Settings) (string, error) {
 	if value.PelicanSecretName == "" {
-		return errors.New("stage pending setup: Pelican secret reference is required")
+		return "", errors.New("stage pending setup: Pelican secret reference is required")
 	}
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate pending setup generation: %w", err)
+	}
+	generation := hex.EncodeToString(bytes)
 	tx, err := s.db.Begin()
 	if err != nil {
-		return fmt.Errorf("begin pending setup transaction: %w", err)
+		return "", fmt.Errorf("begin pending setup transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.Exec(`
-		INSERT INTO pending_setup (id, pelican_url, pelican_secret_name, router_domain, updated_at)
-		VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO pending_setup (id, pelican_url, pelican_secret_name, router_domain, generation, updated_at)
+		VALUES (1, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			pelican_url = excluded.pelican_url,
 			pelican_secret_name = excluded.pelican_secret_name,
 			router_domain = excluded.router_domain,
 			updated_at = CURRENT_TIMESTAMP
-	`, value.PelicanURL, value.PelicanSecretName, value.RouterDomain); err != nil {
-		return fmt.Errorf("stage pending setup: %w", err)
+	`, value.PelicanURL, value.PelicanSecretName, value.RouterDomain, generation); err != nil {
+		return "", fmt.Errorf("stage pending setup: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit pending setup transaction: %w", err)
+		return "", fmt.Errorf("commit pending setup transaction: %w", err)
 	}
-	return nil
+	return generation, nil
 }
 
 // PromotePendingSetup atomically makes the staged candidate active and marks
 // setup complete. A caller must activate the candidate runtime before calling
 // this method and publish it only after this method succeeds.
-func (s *Store) PromotePendingSetup() error {
+func (s *Store) PromotePendingSetup(generation string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin pending setup promotion: %w", err)
@@ -131,8 +138,8 @@ func (s *Store) PromotePendingSetup() error {
 	var value Settings
 	if err := tx.QueryRow(`
 		SELECT pelican_url, pelican_secret_name, router_domain
-		FROM pending_setup WHERE id = 1
-	`).Scan(&value.PelicanURL, &value.PelicanSecretName, &value.RouterDomain); err != nil {
+		FROM pending_setup WHERE id = 1 AND generation = ?
+	`, generation).Scan(&value.PelicanURL, &value.PelicanSecretName, &value.RouterDomain); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}

@@ -25,17 +25,17 @@ type stubSettingsStore struct {
 	setupCompleteErr error
 }
 
-func (s *stubSettingsStore) StageSetup(value settings.Settings) error {
+func (s *stubSettingsStore) StageSetup(value settings.Settings) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.saveErr != nil {
-		return s.saveErr
+		return "", s.saveErr
 	}
 	s.staged = value
-	return nil
+	return "test-generation", nil
 }
 
-func (s *stubSettingsStore) PromotePendingSetup() error {
+func (s *stubSettingsStore) PromotePendingSetup(_ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.promoteErr != nil {
@@ -106,11 +106,12 @@ func (s *stubCandidateActivator) Activate(_ context.Context, _ settings.Settings
 	return nil
 }
 
-func (s *stubCandidateActivator) ActivateSetup(ctx context.Context, value settings.Settings, stage, promote func() error) error {
-	if err := stage(); err != nil {
+func (s *stubCandidateActivator) ActivateSetup(ctx context.Context, value settings.Settings, stage func() (string, error), promote func(string) error) error {
+	generation, err := stage()
+	if err != nil {
 		return err
 	}
-	return s.Activate(ctx, value, promote)
+	return s.Activate(ctx, value, func() error { return promote(generation) })
 }
 
 type serialSetupActivator struct {
@@ -123,10 +124,11 @@ func (*serialSetupActivator) Refresh(context.Context) error { return nil }
 func (s *serialSetupActivator) Activate(context.Context, settings.Settings, func() error) error {
 	return nil
 }
-func (s *serialSetupActivator) ActivateSetup(_ context.Context, _ settings.Settings, stage, promote func() error) error {
+func (s *serialSetupActivator) ActivateSetup(_ context.Context, _ settings.Settings, stage func() (string, error), promote func(string) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := stage(); err != nil {
+	generation, err := stage()
+	if err != nil {
 		return err
 	}
 	select {
@@ -134,7 +136,7 @@ func (s *serialSetupActivator) ActivateSetup(_ context.Context, _ settings.Setti
 	default:
 	}
 	<-s.release
-	return promote()
+	return promote(generation)
 }
 
 func (s *stubRuntimeRefresher) Refresh(context.Context) error {

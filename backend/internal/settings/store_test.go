@@ -457,7 +457,8 @@ func TestStorePromotePendingSetup(t *testing.T) {
 		PelicanSecretName: "pelican_api_key",
 		RouterDomain:      "mc.example.com",
 	}
-	if err := store.StageSetup(pending); err != nil {
+	generation, err := store.StageSetup(pending)
+	if err != nil {
 		t.Fatalf("StageSetup() error = %v", err)
 	}
 	complete, err := store.IsSetupComplete()
@@ -471,7 +472,7 @@ func TestStorePromotePendingSetup(t *testing.T) {
 		t.Fatalf("Load() error = %v, want ErrNotFound before promotion", err)
 	}
 
-	if err := store.PromotePendingSetup(); err != nil {
+	if err := store.PromotePendingSetup(generation); err != nil {
 		t.Fatalf("PromotePendingSetup() error = %v", err)
 	}
 	got, err := store.Load()
@@ -497,6 +498,28 @@ func TestStorePromotePendingSetup(t *testing.T) {
 	}
 }
 
+func TestStorePromotionRequiresMatchingGeneration(t *testing.T) {
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store := NewStore(db)
+	generation, err := store.StageSetup(Settings{PelicanURL: "https://panel.example.test", PelicanSecretName: "credential", RouterDomain: "mc.example.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PromotePendingSetup("different-generation"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PromotePendingSetup() error = %v, want ErrNotFound", err)
+	}
+	if complete, err := store.IsSetupComplete(); err != nil || complete {
+		t.Fatalf("setup complete = %t, error = %v; want false, nil", complete, err)
+	}
+	if err := store.PromotePendingSetup(generation); err != nil {
+		t.Fatalf("PromotePendingSetup() with matching generation: %v", err)
+	}
+}
+
 func TestStoreStageSetupRejectsLegacyCredential(t *testing.T) {
 	t.Parallel()
 	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
@@ -505,7 +528,7 @@ func TestStoreStageSetupRejectsLegacyCredential(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	err = NewStore(db).StageSetup(Settings{
+	_, err = NewStore(db).StageSetup(Settings{
 		PelicanURL:    "https://panel.example.com",
 		PelicanAPIKey: "test-api-key",
 		RouterDomain:  "mc.example.com",
@@ -532,7 +555,8 @@ func TestStorePromotionFailureKeepsPendingSetupRetryable(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	store := NewStore(db)
 	pending := Settings{PelicanURL: "https://panel.example.com", PelicanSecretName: "pelican_api_key", RouterDomain: "mc.example.com"}
-	if err := store.StageSetup(pending); err != nil {
+	generation, err := store.StageSetup(pending)
+	if err != nil {
 		t.Fatalf("StageSetup() error = %v", err)
 	}
 	if _, err := db.Exec(`
@@ -543,7 +567,7 @@ func TestStorePromotionFailureKeepsPendingSetupRetryable(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("create failure trigger: %v", err)
 	}
-	if err := store.PromotePendingSetup(); err == nil {
+	if err := store.PromotePendingSetup(generation); err == nil {
 		t.Fatal("PromotePendingSetup() error = nil, want an error")
 	}
 	complete, err := store.IsSetupComplete()
