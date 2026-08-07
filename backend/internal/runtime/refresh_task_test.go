@@ -42,6 +42,24 @@ type recordingRouteSynchronizer struct {
 	err              error
 }
 
+type activationSynchronizer struct {
+	calls   []routing.RouteSource
+	after   func(int)
+	failAt  int
+	failErr error
+}
+
+func (s *activationSynchronizer) Sync(_ context.Context, source routing.RouteSource) error {
+	s.calls = append(s.calls, source)
+	if s.after != nil {
+		s.after(len(s.calls))
+	}
+	if len(s.calls) == s.failAt {
+		return s.failErr
+	}
+	return nil
+}
+
 type recordingReconciliationObserver struct {
 	statuses []ReconciliationStatus
 }
@@ -184,6 +202,53 @@ func TestRefreshTaskActivatePublishesOnlyAfterPersistence(t *testing.T) {
 	}
 	if manager.Routing() == nil {
 		t.Fatal("candidate runtime was not published after persistence")
+	}
+}
+
+func TestRefreshTaskActivateCompensatesFreshSetupAfterSynchronizationFailure(t *testing.T) {
+	manager := New()
+	synchronizer := &activationSynchronizer{failAt: 1, failErr: errors.New("candidate failed")}
+	task := NewRefreshTask(&fakeSettingsStore{}, 5*time.Second, "", manager, synchronizer, NewReconciliationTracker(), nil)
+
+	err := task.Activate(context.Background(), settings.Settings{
+		PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com",
+	}, func() error { return nil })
+	if !errors.Is(err, synchronizer.failErr) {
+		t.Fatalf("Activate() error = %v, want candidate synchronization error", err)
+	}
+	if len(synchronizer.calls) != 2 {
+		t.Fatalf("Sync() calls = %d, want candidate and compensation", len(synchronizer.calls))
+	}
+	if _, ok := synchronizer.calls[1].(emptyRouteSource); !ok {
+		t.Fatalf("compensation source = %T, want emptyRouteSource", synchronizer.calls[1])
+	}
+	if manager.Routing() != nil {
+		t.Fatal("failed candidate activation published runtime")
+	}
+}
+
+func TestRefreshTaskActivateCompensatesAfterCancellation(t *testing.T) {
+	manager := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	synchronizer := &activationSynchronizer{after: func(call int) {
+		if call == 1 {
+			cancel()
+		}
+	}}
+	task := NewRefreshTask(&fakeSettingsStore{}, 5*time.Second, "", manager, synchronizer, NewReconciliationTracker(), nil)
+
+	err := task.Activate(ctx, settings.Settings{
+		PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com",
+	}, func() error { return nil })
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Activate() error = %v, want context cancellation", err)
+	}
+	if len(synchronizer.calls) != 2 {
+		t.Fatalf("Sync() calls = %d, want candidate and compensation", len(synchronizer.calls))
+	}
+	if _, ok := synchronizer.calls[1].(emptyRouteSource); !ok {
+		t.Fatalf("compensation source = %T, want emptyRouteSource", synchronizer.calls[1])
 	}
 }
 

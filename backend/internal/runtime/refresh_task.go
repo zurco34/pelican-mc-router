@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/zurco34/pelican-mc-router/internal/router"
 	"github.com/zurco34/pelican-mc-router/internal/settings"
 )
+
+const activationCompensationTimeout = 5 * time.Second
 
 type SettingsStore interface {
 	IsSetupComplete() (bool, error)
@@ -176,6 +179,7 @@ func (r *RefreshTask) Activate(ctx context.Context, value settings.Settings, per
 		return err
 	}
 	defer r.release()
+	previous := r.manager.Routing()
 	discoveryService, routingService, err := r.buildRuntimeServicesFor(value)
 	if err != nil {
 		return fmt.Errorf("build candidate runtime services: %w", err)
@@ -189,27 +193,74 @@ func (r *RefreshTask) Activate(ctx context.Context, value settings.Settings, per
 			return fmt.Errorf("prepare inventory: %w", err)
 		}
 	}
+	synchronizationAttempted := false
+	compensate := func(primary error) error {
+		if !synchronizationAttempted || r.synchronizer == nil {
+			return primary
+		}
+
+		// A candidate synchronization can partially mutate a backend even when it
+		// returns an error. Keep the activation owner lock while restoring the
+		// previous desired state (or the empty managed set for fresh setup).
+		restore := previous
+		if restore == nil {
+			var restoreErr error
+			restore, restoreErr = r.previousRoutingService()
+			if restoreErr != nil {
+				return errors.Join(primary, fmt.Errorf("build compensation runtime: %w", restoreErr))
+			}
+		}
+		if restore == nil {
+			restore = emptyRouteSource{}
+		}
+
+		cleanup, cancel := context.WithTimeout(context.Background(), activationCompensationTimeout)
+		defer cancel()
+		if _, err := synchronizeRoutes(cleanup, r.synchronizer, restore); err != nil {
+			return errors.Join(primary, fmt.Errorf("compensate candidate activation: %w", err))
+		}
+		return primary
+	}
 	if r.synchronizer != nil {
+		synchronizationAttempted = true
 		if _, err := synchronizeRoutes(ctx, r.synchronizer, routingService); err != nil {
-			return fmt.Errorf("synchronize candidate routes: %w", err)
+			return compensate(fmt.Errorf("synchronize candidate routes: %w", err))
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return compensate(err)
 	}
 	if err := persist(); err != nil {
-		// Best-effort compensation uses the existing, last-known-good source while
-		// this activation remains the sole refresh owner.
-		if previous := r.manager.Routing(); previous != nil && r.synchronizer != nil {
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, _ = synchronizeRoutes(cleanup, r.synchronizer, previous)
-			cancel()
-		}
-		return fmt.Errorf("persist candidate activation: %w", err)
+		return compensate(fmt.Errorf("persist candidate activation: %w", err))
 	}
 	r.manager.Set(discoveryService, routingService)
 	return nil
 }
+
+// previousRoutingService reconstructs a durable active runtime only when a
+// prior configured state exists. It deliberately does not publish the result.
+func (r *RefreshTask) previousRoutingService() (RoutingService, error) {
+	configured, err := r.store.IsSetupComplete()
+	if err != nil {
+		return nil, fmt.Errorf("determine previous setup status: %w", err)
+	}
+	if !configured {
+		return nil, nil
+	}
+	value, err := r.store.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load previous settings: %w", err)
+	}
+	_, routingService, err := r.buildRuntimeServicesFor(value)
+	if err != nil {
+		return nil, fmt.Errorf("build previous runtime services: %w", err)
+	}
+	return routingService, nil
+}
+
+type emptyRouteSource struct{}
+
+func (emptyRouteSource) Routes(context.Context) ([]router.Route, error) { return nil, nil }
 
 func (r *RefreshTask) acquire(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
