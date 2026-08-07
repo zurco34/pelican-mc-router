@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -41,6 +42,7 @@ type Event struct {
 type Store struct {
 	db        *sql.DB
 	retention int
+	appendMu  sync.Mutex
 }
 
 func NewStore(db *sql.DB, retention ...int) *Store {
@@ -54,6 +56,8 @@ func (s *Store) Append(ctx context.Context, event Event) error {
 	if !validAction(event.Action) || !validOutcome(event.Outcome) {
 		return ErrInvalidEvent
 	}
+	s.appendMu.Lock()
+	defer s.appendMu.Unlock()
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
 	} else {
