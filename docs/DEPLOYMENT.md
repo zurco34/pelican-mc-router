@@ -393,6 +393,10 @@ control.
 The service validates provider metadata during startup and fails
 closed if that check cannot complete.
 
+The example configuration starts with OIDC disabled only until these values
+are configured. In that state, management endpoints are fail-closed; they do
+not become public. Enable OIDC before normal viewer or operator API use.
+
 The application returns generic HTTP `401` for absent or invalid tokens and
 HTTP `403` for authenticated identities without the role. It does not log,
 return, or expose token contents, subjects, or roles in metrics. Keep the
