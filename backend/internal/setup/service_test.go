@@ -120,6 +120,42 @@ type serialSetupActivator struct {
 	release chan struct{}
 }
 
+type sequenceSetupActivator struct {
+	mu        sync.Mutex
+	errs      []error
+	published int
+}
+
+func (*sequenceSetupActivator) Refresh(context.Context) error { return nil }
+
+func (s *sequenceSetupActivator) Activate(_ context.Context, _ settings.Settings, persist func() error) error {
+	return persist()
+}
+
+func (s *sequenceSetupActivator) ActivateSetup(ctx context.Context, _ settings.Settings, stage func() (string, error), promote func(string) error) error {
+	generation, err := stage()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(s.errs) > 0 {
+		err := s.errs[0]
+		s.errs = s.errs[1:]
+		if err != nil {
+			return err
+		}
+	}
+	if err := promote(generation); err != nil {
+		return err
+	}
+	s.published++
+	return nil
+}
+
 func (*serialSetupActivator) Refresh(context.Context) error { return nil }
 func (s *serialSetupActivator) Activate(context.Context, settings.Settings, func() error) error {
 	return nil
@@ -163,6 +199,38 @@ func TestNewService(t *testing.T) {
 	}
 }
 func TestServiceSetup(t *testing.T) {
+	t.Run("failed activation remains retryable across a new service", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		input := settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"}
+		first := &sequenceSetupActivator{errs: []error{errRefreshFailed}}
+		if err := NewService(store, &stubPelicanValidator{}, first).Setup(context.Background(), input); !errors.Is(err, errRefreshFailed) {
+			t.Fatalf("first Setup() error = %v, want activation failure", err)
+		}
+		if store.setupComplete || store.saved != (settings.Settings{}) || store.staged != input {
+			t.Fatalf("failed setup state = %+v, want retryable pending candidate only", store)
+		}
+
+		second := &sequenceSetupActivator{}
+		if err := NewService(store, &stubPelicanValidator{}, second).Setup(context.Background(), input); err != nil {
+			t.Fatalf("retry Setup() error = %v", err)
+		}
+		if !store.setupComplete || store.saved != input || second.published != 1 {
+			t.Fatalf("retry did not promote and publish the candidate coherently: complete=%t saved=%+v published=%d", store.setupComplete, store.saved, second.published)
+		}
+	})
+
+	t.Run("canceled activation remains retryable", func(t *testing.T) {
+		store := &stubSettingsStore{}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		input := settings.Settings{PelicanURL: "https://panel.example.com", PelicanAPIKey: "test-key", RouterDomain: "mc.example.com"}
+		if err := NewService(store, &stubPelicanValidator{}, &sequenceSetupActivator{}).Setup(ctx, input); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Setup() error = %v, want context.Canceled", err)
+		}
+		if store.setupComplete || store.saved != (settings.Settings{}) || store.staged != input {
+			t.Fatal("canceled setup changed active state or lost the retryable candidate")
+		}
+	})
 	t.Run("serializes concurrent pending candidates", func(t *testing.T) {
 		store := &stubSettingsStore{}
 		activator := &serialSetupActivator{entered: make(chan struct{}, 1), release: make(chan struct{})}
