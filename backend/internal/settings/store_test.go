@@ -520,6 +520,76 @@ func TestStorePromotionRequiresMatchingGeneration(t *testing.T) {
 	}
 }
 
+func TestStoreRestagingReplacesPendingCandidateGeneration(t *testing.T) {
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store := NewStore(db)
+
+	candidateA := Settings{PelicanURL: "https://panel-a.example.test", PelicanSecretName: "credential-a", RouterDomain: "a.example.test"}
+	generationA, err := store.StageSetup(candidateA)
+	if err != nil {
+		t.Fatalf("stage candidate A: %v", err)
+	}
+	candidateB := Settings{PelicanURL: "https://panel-b.example.test", PelicanSecretName: "credential-b", RouterDomain: "b.example.test"}
+	generationB, err := store.StageSetup(candidateB)
+	if err != nil {
+		t.Fatalf("stage candidate B: %v", err)
+	}
+	if generationA == generationB {
+		t.Fatal("restaged candidate reused its generation")
+	}
+
+	var stored Settings
+	var storedGeneration string
+	if err := db.QueryRow(`SELECT pelican_url, pelican_secret_name, router_domain, generation FROM pending_setup WHERE id = 1`).Scan(&stored.PelicanURL, &stored.PelicanSecretName, &stored.RouterDomain, &storedGeneration); err != nil {
+		t.Fatalf("load restaged candidate: %v", err)
+	}
+	if stored != candidateB || storedGeneration != generationB {
+		t.Fatalf("pending candidate = %#v generation %q, want %#v generation %q", stored, storedGeneration, candidateB, generationB)
+	}
+	if err := store.PromotePendingSetup(generationA); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("promote stale candidate A: %v, want ErrNotFound", err)
+	}
+	if complete, err := store.IsSetupComplete(); err != nil || complete {
+		t.Fatalf("setup complete after stale promotion = %t, error = %v; want false, nil", complete, err)
+	}
+	if err := store.PromotePendingSetup(generationB); err != nil {
+		t.Fatalf("promote candidate B: %v", err)
+	}
+	if got, err := store.Load(); err != nil || got != candidateB {
+		t.Fatalf("active settings = %#v, error = %v; want %#v, nil", got, err, candidateB)
+	}
+	if complete, err := store.IsSetupComplete(); err != nil || !complete {
+		t.Fatalf("setup complete after candidate B promotion = %t, error = %v; want true, nil", complete, err)
+	}
+}
+
+func TestStoreRestagingLegacyPendingGenerationAllowsPromotion(t *testing.T) {
+	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO pending_setup (id, pelican_url, pelican_secret_name, router_domain, generation, updated_at) VALUES (1, 'https://legacy.example.test', 'legacy-secret', 'legacy.example.test', '', CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("insert legacy pending candidate: %v", err)
+	}
+	store := NewStore(db)
+	want := Settings{PelicanURL: "https://replacement.example.test", PelicanSecretName: "replacement-secret", RouterDomain: "replacement.example.test"}
+	generation, err := store.StageSetup(want)
+	if err != nil {
+		t.Fatalf("restage legacy candidate: %v", err)
+	}
+	if err := store.PromotePendingSetup(generation); err != nil {
+		t.Fatalf("promote restaged legacy candidate: %v", err)
+	}
+	if got, err := store.Load(); err != nil || got != want {
+		t.Fatalf("active settings = %#v, error = %v; want %#v, nil", got, err, want)
+	}
+}
+
 func TestStoreStageSetupRejectsLegacyCredential(t *testing.T) {
 	t.Parallel()
 	db, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "router.db")})
