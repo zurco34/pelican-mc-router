@@ -179,7 +179,7 @@ func (r *RefreshTask) Activate(ctx context.Context, value settings.Settings, per
 		return err
 	}
 	defer r.release()
-	return r.activateLocked(ctx, value, persist)
+	return r.activateAndTrackLocked(ctx, value, persist)
 }
 
 // ActivateSetup keeps staging, reconciliation, promotion, and publication
@@ -194,22 +194,38 @@ func (r *RefreshTask) ActivateSetup(ctx context.Context, value settings.Settings
 	if err != nil {
 		return fmt.Errorf("stage candidate setup: %w", err)
 	}
-	return r.activateLocked(ctx, value, func() error { return promote(generation) })
+	return r.activateAndTrackLocked(ctx, value, func() error { return promote(generation) })
 }
 
-func (r *RefreshTask) activateLocked(ctx context.Context, value settings.Settings, persist func() error) error {
+func (r *RefreshTask) activateAndTrackLocked(ctx context.Context, value settings.Settings, persist func() error) error {
+	r.tracker.Start()
+	r.observe()
+	result, err := r.activateLocked(ctx, value, persist)
+	if err != nil {
+		r.tracker.CompleteRuntimeBuildFailure()
+		r.observe()
+		r.record(ctx)
+		return err
+	}
+	r.tracker.CompleteSuccess(result)
+	r.observe()
+	r.record(ctx)
+	return nil
+}
+
+func (r *RefreshTask) activateLocked(ctx context.Context, value settings.Settings, persist func() error) (router.ReconciliationResult, error) {
 	previous := r.manager.Routing()
 	discoveryService, routingService, err := r.buildRuntimeServicesFor(value)
 	if err != nil {
-		return fmt.Errorf("build candidate runtime services: %w", err)
+		return router.ReconciliationResult{}, fmt.Errorf("build candidate runtime services: %w", err)
 	}
 	if _, productionSynchronizer := r.synchronizer.(*router.Synchronizer); productionSynchronizer {
 		inventory, ok := discoveryService.(*Inventory)
 		if !ok {
-			return fmt.Errorf("prepare inventory: inventory service is unavailable")
+			return router.ReconciliationResult{}, fmt.Errorf("prepare inventory: inventory service is unavailable")
 		}
 		if err := inventory.Refresh(ctx); err != nil {
-			return fmt.Errorf("prepare inventory: %w", err)
+			return router.ReconciliationResult{}, fmt.Errorf("prepare inventory: %w", err)
 		}
 	}
 	synchronizationAttempted := false
@@ -242,18 +258,27 @@ func (r *RefreshTask) activateLocked(ctx context.Context, value settings.Setting
 	}
 	if r.synchronizer != nil {
 		synchronizationAttempted = true
-		if _, err := synchronizeRoutes(ctx, r.synchronizer, routingService); err != nil {
-			return compensate(fmt.Errorf("synchronize candidate routes: %w", err))
+		result, err := synchronizeRoutes(ctx, r.synchronizer, routingService)
+		if err != nil {
+			return result, compensate(fmt.Errorf("synchronize candidate routes: %w", err))
 		}
+		if err := ctx.Err(); err != nil {
+			return result, compensate(err)
+		}
+		if err := persist(); err != nil {
+			return result, compensate(fmt.Errorf("persist candidate activation: %w", err))
+		}
+		r.manager.Set(discoveryService, routingService)
+		return result, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return compensate(err)
+		return router.ReconciliationResult{}, compensate(err)
 	}
 	if err := persist(); err != nil {
-		return compensate(fmt.Errorf("persist candidate activation: %w", err))
+		return router.ReconciliationResult{}, compensate(fmt.Errorf("persist candidate activation: %w", err))
 	}
 	r.manager.Set(discoveryService, routingService)
-	return nil
+	return router.ReconciliationResult{}, nil
 }
 
 // previousRoutingService reconstructs a durable active runtime only when a
