@@ -203,6 +203,13 @@ func TestRefreshTaskActivatePublishesOnlyAfterPersistence(t *testing.T) {
 	if manager.Routing() == nil {
 		t.Fatal("candidate runtime was not published after persistence")
 	}
+	status := task.ReconciliationTracker().Snapshot()
+	if status.LastOutcome == nil || *status.LastOutcome != ReconciliationOutcomeSuccess {
+		t.Fatalf("candidate activation reconciliation status = %+v, want success", status)
+	}
+	if status.InProgress {
+		t.Fatal("candidate activation reconciliation remained in progress")
+	}
 }
 
 func TestRefreshTaskActivateCompensatesFreshSetupAfterSynchronizationFailure(t *testing.T) {
