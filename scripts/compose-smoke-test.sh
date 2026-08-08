@@ -239,6 +239,11 @@ printf 'Runtime identity: %s\n' "${runtime_identity}"
 [[ "${runtime_identity}" = "10001:10001" ]] ||
   fail "unexpected runtime identity: ${runtime_identity}"
 
+log "Verifying offline recovery binary is present"
+container_exec \
+  pelican-mc-router \
+  test -x /usr/local/bin/sqlite-recovery
+
 log "Creating route through private mc-router API"
 
 readonly ROUTE_HOSTNAME="smoke-test.mc.example.com"
