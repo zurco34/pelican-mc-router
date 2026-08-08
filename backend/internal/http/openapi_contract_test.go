@@ -126,3 +126,15 @@ func TestOpenAPIManualReconcileUnavailableResponse(t *testing.T) {
 		t.Fatal("OpenAPI manual reconciliation 404 response is missing")
 	}
 }
+
+func TestOpenAPISettingsBeforeSetupConflictResponse(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile(filepath.Join("..", "..", "..", "docs", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := document.Paths.Find("/api/v1/settings").GetOperation(http.MethodPut)
+	if operation.Responses.Value(strconv.Itoa(http.StatusConflict)) == nil {
+		t.Fatal("OpenAPI settings update 409 response is missing")
+	}
+}
