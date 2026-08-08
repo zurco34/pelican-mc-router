@@ -81,13 +81,18 @@ func TestOpenAPIOperationalResponseConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load OpenAPI document: %v", err)
 	}
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	metrics := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		_, _ = w.Write([]byte("test_metric 1\n"))
+	})
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), metrics)
 	for _, test := range []struct {
 		method, path, contentType string
 		status                    int
 	}{
 		{http.MethodGet, "/health", "text/plain", http.StatusOK},
 		{http.MethodGet, "/ready", "application/json", http.StatusServiceUnavailable},
+		{http.MethodGet, "/metrics", "text/plain", http.StatusOK},
 	} {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
