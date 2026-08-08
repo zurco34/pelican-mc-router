@@ -14,6 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lifecycle:
+    name: Disposable control-plane lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Exercise bootstrap lifecycle
+        run: >-
+          go test -race -count=1
+          ./internal/app
+          -run '^TestRunLifecycleBootstrapSetupRestartAndShutdown$'
+
   verify:
     name: Test, vet, and build
     runs-on: ubuntu-latest
