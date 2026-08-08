@@ -13,8 +13,9 @@ credentials, databases, or routing backends for release verification.
 4. Stop the service and run `sqlite-recovery -operation integrity` followed by
    a backup. Restore only to a new path and verify that restored copy before
    replacing an offline database.
-5. Upgrade a disposable v0.5 database to the candidate. Confirm migration
-   checksums are recorded and startup succeeds. Roll back only after retaining
-   the original backup; older images cannot consume future schema semantics.
+5. Upgrade a disposable database from the previous supported release to the
+   candidate. Confirm migration checksums are recorded and startup succeeds.
+   Roll back only after retaining the original backup; older images cannot
+   consume future schema semantics.
 
 Use Podman Compose in this environment, or Docker Compose where supported.
