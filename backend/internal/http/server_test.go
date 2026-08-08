@@ -64,6 +64,17 @@ type fakeActionHistoryWriter struct {
 	err    error
 }
 
+type fakeActionHistoryReader struct {
+	events []actionhistory.Event
+	limit  int
+	err    error
+}
+
+func (f *fakeActionHistoryReader) List(_ context.Context, limit int) ([]actionhistory.Event, error) {
+	f.limit = limit
+	return f.events, f.err
+}
+
 func (f *fakeActionHistoryWriter) Append(_ context.Context, event actionhistory.Event) error {
 	f.events = append(f.events, event)
 	return f.err
@@ -1686,6 +1697,29 @@ func TestOperationalHistoryEndpointIsBoundedAndSafe(t *testing.T) {
 	server.Router().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("invalid limit status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestActionHistoryEndpointIsBoundedAndDTOBacked(t *testing.T) {
+	reader := &fakeActionHistoryReader{events: []actionhistory.Event{{OccurredAt: time.Date(2026, time.January, 1, 1, 2, 3, 4, time.UTC), Action: actionhistory.ActionSetup, Outcome: actionhistory.OutcomeSuccess}}}
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithActionHistoryReader(reader)
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/action-history?limit=1", nil))
+	if recorder.Code != http.StatusOK || reader.limit != 1 {
+		t.Fatalf("status/limit = %d/%d, want 200/1", recorder.Code, reader.limit)
+	}
+	var response struct {
+		Events []map[string]json.RawMessage `json:"events"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Events) != 1 {
+		t.Fatalf("events = %d, want 1", len(response.Events))
+	}
+	assertJSONKeys(t, response.Events[0], "occurred_at", "action", "outcome")
+	if _, ok := response.Events[0]["id"]; ok {
+		t.Fatal("action history response exposed an internal id")
 	}
 }
 
