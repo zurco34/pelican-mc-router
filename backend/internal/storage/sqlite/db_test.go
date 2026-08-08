@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -177,5 +178,31 @@ func TestMigrateRecordsMigrationChecksums(t *testing.T) {
 	}
 	if err := Migrate(db); err == nil {
 		t.Fatal("Migrate() error = nil, want checksum mismatch")
+	}
+}
+
+func TestMigrateRejectsFutureSchemaBeforeMetadataWrites(t *testing.T) {
+	db, err := Open(Config{Path: filepath.Join(t.TempDir(), "router.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO schema_migrations (version, checksum) VALUES ('9999_future.sql', 'future-checksum')`); err != nil {
+		t.Fatal(err)
+	}
+	var before int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	err = Migrate(db)
+	if err == nil || !strings.Contains(err.Error(), "database schema is newer than this binary") {
+		t.Fatalf("Migrate() error = %v, want future schema refusal", err)
+	}
+	var after int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("migration metadata count = %d, want unchanged %d", after, before)
 	}
 }
