@@ -154,3 +154,20 @@ func TestOpenAPIRoutePolicyRequestsAreOperationSpecific(t *testing.T) {
 		t.Fatal("update schema must take server_uuid from the path and require revision")
 	}
 }
+
+func TestOpenAPISeparatesStrictRequestsFromAdditiveResponses(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile(filepath.Join("..", "..", "..", "docs", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	strict := document.Components.Schemas["SettingsRequest"].Value.AdditionalProperties
+	if strict.Has == nil || *strict.Has || strict.Schema != nil {
+		t.Fatal("settings requests must reject unknown fields")
+	}
+	for _, name := range []string{"ActionHistory", "ManualReconcile"} {
+		if has := document.Components.Schemas[name].Value.AdditionalProperties.Has; has != nil && *has {
+			t.Fatalf("%s response must permit additive fields", name)
+		}
+	}
+}
