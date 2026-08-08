@@ -96,6 +96,15 @@ PELICAN_MC_ROUTER_SECRETS_BOOTSTRAP_TOKEN_NAME=bootstrap-token
 # Required when Pelican allocations use 0.0.0.0 or ::.
 PELICAN_MC_ROUTER_DISCOVERY_WILDCARD_BACKEND_HOST=192.168.1.10
 
+# Configure verified OIDC before normal management use. With this disabled,
+# management endpoints intentionally remain fail-closed after bootstrap.
+PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED=true
+PELICAN_MC_ROUTER_DASHBOARD_AUTH_ISSUER_URL=https://issuer.example.com
+PELICAN_MC_ROUTER_DASHBOARD_AUTH_AUDIENCE=pelican-mc-router
+PELICAN_MC_ROUTER_DASHBOARD_AUTH_ROLE_CLAIM=roles
+PELICAN_MC_ROUTER_DASHBOARD_AUTH_REQUIRED_ROLE=viewer
+PELICAN_MC_ROUTER_DASHBOARD_AUTH_OPERATOR_ROLE=operator
+
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
 PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.3
 ```
@@ -116,8 +125,8 @@ This mount provides both the one-time bootstrap token and file-backed Pelican
 credential references. For rootful Docker, use directory mode `0700`, file
 mode `0600`, and ownership `10001:10001` so the non-root container can traverse
 the directory and read owner-only files. For rootless Podman, set equivalent
-mapped ownership with `podman unshare chown 10001:10001 ./secrets/*`; apply an
-SELinux relabel option only when the host requires it. Do not put a token or
+mapped ownership with `podman unshare chown -R 10001:10001 ./secrets`; apply
+an SELinux relabel option only when the host requires it. Do not put a token or
 API key in `.env`, logs, or shell history.
 
 For an uninitialized database, create the configured bootstrap-token file in
@@ -126,6 +135,11 @@ token generated and retained by the operator; use it only in the HTTP
 `Authorization` header for `GET` or `POST /api/v1/setup`. Avoid clients, shell
 history, or diagnostics that record request headers. After successful setup,
 these routes return `404` and the bootstrap token cannot be replayed.
+
+Set the OIDC environment values before starting the service for normal
+management use. Bootstrap setup remains available while the database is
+uninitialized, but every viewer or operator endpoint stays unavailable until
+verified OIDC authorization is configured.
 
 Keep `PELICAN_MC_ROUTER_IMAGE` pinned to an exact release version in production.
 This makes upgrades explicit and prevents an unrelated moving tag from changing
@@ -242,20 +256,35 @@ umask 077
 cat > ./secrets/pelican-api-key
 # paste the panel-issued Application API key, then press Ctrl-D
 openssl rand -base64 48 > ./secrets/bootstrap-token
-chown 10001:10001 ./secrets/pelican-api-key ./secrets/bootstrap-token
+sudo chown 10001:10001 ./secrets
+sudo chown 10001:10001 ./secrets/pelican-api-key ./secrets/bootstrap-token
 chmod 600 ./secrets/pelican-api-key ./secrets/bootstrap-token
 ```
+
+For rootless Podman, create the same files, then set ownership through its user
+namespace instead of using host-root ownership:
+
+```bash
+podman unshare chown -R 10001:10001 ./secrets
+podman unshare chmod 700 ./secrets
+podman unshare chmod 600 ./secrets/pelican-api-key ./secrets/bootstrap-token
+```
+
+Use `:Z` or an equivalent relabel only when an SELinux-enforcing host requires
+it for the bind mount.
 
 Submit the initial setup:
 
 ```bash
+read -r BOOTSTRAP_TOKEN < ./secrets/bootstrap-token
+
 curl \
   --fail \
   --show-error \
   --silent \
   --request POST \
   --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer $(cat ./secrets/bootstrap-token)" \
+  --header "Authorization: Bearer ${BOOTSTRAP_TOKEN}" \
   --data-binary @- \
   http://127.0.0.1:8080/api/v1/setup <<EOF
 {
@@ -264,6 +293,8 @@ curl \
   "router_domain": "mc.example.com"
 }
 EOF
+
+unset BOOTSTRAP_TOKEN
 
 ```
 
@@ -275,6 +306,10 @@ viewer bearer token to query authenticated status instead.
 After setup completes, verify observability endpoints:
 
 ```bash
+# Obtain this value from the configured verified OIDC issuer or proxy; never
+# substitute the bootstrap token or store either token in .env.
+test -n "${OIDC_TOKEN:?set a verified viewer or operator bearer token}"
+
 curl --fail http://127.0.0.1:8080/ready
 curl --fail --header "Authorization: Bearer $OIDC_TOKEN" http://127.0.0.1:8080/api/v1/status
 curl --fail http://127.0.0.1:8080/metrics
@@ -291,9 +326,12 @@ contain hostnames, server identifiers, URLs, or backend error text.
 Inspect discovered servers:
 
 ```bash
+test -n "${OIDC_TOKEN:?set a verified viewer or operator bearer token}"
+
 curl \
   --fail \
   --silent \
+  --header "Authorization: Bearer ${OIDC_TOKEN}" \
   http://127.0.0.1:8080/api/v1/servers
 ```
 
@@ -303,6 +341,7 @@ Inspect generated routes:
 curl \
   --fail \
   --silent \
+  --header "Authorization: Bearer ${OIDC_TOKEN}" \
   http://127.0.0.1:8080/api/v1/routes
 ```
 
