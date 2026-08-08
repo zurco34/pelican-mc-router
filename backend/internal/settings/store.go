@@ -115,6 +115,7 @@ func (s *Store) StageSetup(value Settings) (string, error) {
 			pelican_url = excluded.pelican_url,
 			pelican_secret_name = excluded.pelican_secret_name,
 			router_domain = excluded.router_domain,
+			generation = excluded.generation,
 			updated_at = CURRENT_TIMESTAMP
 	`, value.PelicanURL, value.PelicanSecretName, value.RouterDomain, generation); err != nil {
 		return "", fmt.Errorf("stage pending setup: %w", err)
