@@ -138,3 +138,19 @@ func TestOpenAPISettingsBeforeSetupConflictResponse(t *testing.T) {
 		t.Fatal("OpenAPI settings update 409 response is missing")
 	}
 }
+
+func TestOpenAPIRoutePolicyRequestsAreOperationSpecific(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile(filepath.Join("..", "..", "..", "docs", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := document.Paths.Find("/api/v1/route-policies").GetOperation(http.MethodPost).RequestBody.Value.Content.Get("application/json").Schema.Value
+	update := document.Paths.Find("/api/v1/route-policies/{serverUUID}").GetOperation(http.MethodPut).RequestBody.Value.Content.Get("application/json").Schema.Value
+	if _, ok := create.Properties["server_uuid"]; !ok || create.Properties["revision"] != nil {
+		t.Fatal("create schema must require server_uuid and omit revision")
+	}
+	if _, ok := update.Properties["server_uuid"]; ok || update.Properties["revision"] == nil {
+		t.Fatal("update schema must take server_uuid from the path and require revision")
+	}
+}
