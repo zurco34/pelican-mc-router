@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.4 - 2026-08-08
+
+### Fixed
+
+- Candidate setup activation records its completed reconciliation state, so
+  readiness becomes healthy after a successful initial setup.
+
+### Added
+
+- A disposable application lifecycle test covering bootstrap setup, file-backed
+  credentials, reconciliation, restart closure, and graceful shutdown.
+- A dedicated race-enabled Backend CI gate for the disposable lifecycle test.
+
+### Changed
+
+- Deployment guidance now requires OIDC configuration before normal management
+  use and provides explicit rootful Docker and rootless Podman secret ownership
+  steps.
+
+### Upgrade notes
+
+- Back up the SQLite volume before upgrade. v1.0.3 remains the immediate
+  rollback image only while the database schema remains compatible.
+
 ## 1.0.3 - 2026-08-07
 
 ### Fixed
