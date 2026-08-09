@@ -24,6 +24,8 @@ cleanup() {
   "${compose[@]}" --project-name "${project}" --file docker-compose.yml --file docker-compose.lifecycle.yml down --volumes --remove-orphans || true
   if [[ "${engine}" = podman ]]; then
     podman unshare chown 0:0 "${secrets}" "${secrets}"/* 2>/dev/null || true
+  else
+    sudo chown "$(id -u):$(id -g)" "${secrets}" "${secrets}"/* 2>/dev/null || true
   fi
   rm -rf -- "${secrets}"
 }
