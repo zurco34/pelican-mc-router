@@ -44,6 +44,7 @@ func TestRunLifecycleBootstrapSetupRestartAndShutdown(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	waitForStatus(t, client, address, "/health", http.StatusOK)
 	waitForStatus(t, client, address, "/ready", http.StatusServiceUnavailable)
+	waitForStatus(t, client, address, "/api/v1/status", http.StatusServiceUnavailable)
 
 	setupBody := []byte(fmt.Sprintf(`{"pelican_url":%q,"pelican_secret_name":"pelican-api-key","router_domain":"mc.example.test"}`, pelican.URL+"/api/application"))
 	request, err := http.NewRequest(http.MethodPost, "http://"+address+"/api/v1/setup", bytes.NewReader(setupBody))

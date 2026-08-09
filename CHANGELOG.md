@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.5 - 2026-08-09
+
+### Fixed
+
+- HTTP control-plane logs now use stable failure categories and do not include
+  raw external error text.
+- The versioned API contract distinguishes route-policy create and update
+  requests, documents settings-before-setup conflicts, and preserves additive
+  response compatibility.
+
+### Added
+
+- Authorization-class and lifecycle coverage for public operational,
+  bootstrap-only, viewer, and operator paths, including fail-closed management
+  wiring when OIDC is disabled.
+- Disposable validation covers safe error logging, setup-state behavior,
+  recovery-binary availability, non-root operation, and private routing
+  backend connectivity.
+
+### Upgrade notes
+
+- Back up the SQLite volume before upgrade. Migrations are forward-only; use a
+  verified pre-upgrade backup when a rollback requires an older binary.
+
 ## 1.0.4 - 2026-08-08
 
 ### Fixed

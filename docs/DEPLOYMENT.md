@@ -106,7 +106,7 @@ PELICAN_MC_ROUTER_DASHBOARD_AUTH_REQUIRED_ROLE=viewer
 PELICAN_MC_ROUTER_DASHBOARD_AUTH_OPERATOR_ROLE=operator
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.4
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.5
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -408,7 +408,7 @@ test -n "$volume_name"
 docker compose stop pelican-mc-router
 docker run --rm --entrypoint sqlite-recovery \
   -v "$volume_name:/data:ro" \
-  ghcr.io/zurco34/pelican-mc-router:1.0.4 \
+  ghcr.io/zurco34/pelican-mc-router:1.0.5 \
   -operation integrity -source /data/pelican-mc-router.db
 
 # Mount a separate writable, operator-protected backup directory for backup or
@@ -542,7 +542,7 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.4
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.5
 ```
 
 Change the tag to the exact release being installed.

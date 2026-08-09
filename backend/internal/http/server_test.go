@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -229,6 +230,55 @@ func TestHealthHandler(t *testing.T) {
 			got,
 			"text/plain; charset=utf-8",
 		)
+	}
+}
+
+func TestRouteAuthorizationClasses(t *testing.T) {
+	metrics := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		_, _ = w.Write([]byte("test_metric 1\n"))
+	})
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), metrics).
+		WithBootstrapAuthorization(&fakeBootstrapAuthorizer{err: errors.New("denied")}).
+		WithManagementAuthorization(fakeDashboardAuthorizer{err: errors.New("denied"), operatorErr: errors.New("denied")})
+
+	for _, test := range []struct {
+		name, method, path string
+		want               int
+	}{
+		{"public health", http.MethodGet, "/health", http.StatusOK},
+		{"public ready", http.MethodGet, "/ready", http.StatusServiceUnavailable},
+		{"public metrics", http.MethodGet, "/metrics", http.StatusOK},
+		{"bootstrap setup", http.MethodGet, "/api/v1/setup", http.StatusUnauthorized},
+		{"viewer status", http.MethodGet, "/api/v1/status", http.StatusUnauthorized},
+		{"viewer servers", http.MethodGet, "/api/v1/servers", http.StatusUnauthorized},
+		{"operator settings", http.MethodPut, "/api/v1/settings", http.StatusUnauthorized},
+		{"operator policies", http.MethodPost, "/api/v1/route-policies", http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(recorder, httptest.NewRequest(test.method, test.path, nil))
+			if recorder.Code != test.want {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.want)
+			}
+		})
+	}
+}
+
+func TestReadinessLogsOnlySafeFailureCategory(t *testing.T) {
+	secret := "https://panel.example.test/credential-value"
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	server := NewServer(runtime.New(), &fakeSetupService{err: errors.New(secret)}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	server.Router().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if got := logs.String(); strings.Contains(got, secret) || strings.Contains(got, "credential-value") {
+		t.Fatalf("readiness log disclosed error data: %s", got)
+	}
+	if !strings.Contains(logs.String(), "get readiness failed") {
+		t.Fatalf("readiness log = %s, want safe failure category", logs.String())
 	}
 }
 
