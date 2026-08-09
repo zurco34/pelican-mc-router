@@ -517,7 +517,7 @@ func readinessFor(
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	completed, err := s.setup.IsSetupComplete(r.Context())
 	if err != nil {
-		slog.Error("get readiness", "error", err)
+		slog.Error("get readiness failed")
 		writeJSON(w, http.StatusServiceUnavailable, readinessResponse{Ready: false, Reason: "status_unavailable"})
 		return
 	}
@@ -534,7 +534,7 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	setupCompleted, err := s.setup.IsSetupComplete(r.Context())
 	if err != nil {
-		slog.Error("get application status", "error", err)
+		slog.Error("get application status failed")
 		writeJSONError(w, http.StatusServiceUnavailable, "application status unavailable")
 		return
 	}
@@ -598,7 +598,7 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := w.Write([]byte("OK")); err != nil {
-		slog.Error("write health response", "error", err)
+		slog.Error("write health response failed")
 	}
 }
 
@@ -614,7 +614,7 @@ func (s *Server) listServers(
 
 	servers, err := discovery.Discover(r.Context())
 	if err != nil {
-		slog.Error("discover Minecraft servers", "error", err)
+		slog.Error("discover Minecraft servers failed")
 
 		writeJSONError(
 			w,
@@ -640,7 +640,7 @@ func (s *Server) listRoutes(
 
 	routes, err := routingService.Routes(r.Context())
 	if err != nil {
-		slog.Error("generate Minecraft routes", "error", err)
+		slog.Error("generate Minecraft routes failed")
 
 		writeJSONError(
 			w,
@@ -691,7 +691,7 @@ func (s *Server) getSetupStatus(
 ) {
 	completed, err := s.setup.IsSetupComplete(r.Context())
 	if err != nil {
-		slog.Error("get setup status", "error", err)
+		slog.Error("get setup status failed")
 
 		writeJSONError(
 			w,
@@ -760,7 +760,7 @@ func (s *Server) configureSetup(
 			return
 		}
 
-		slog.Error("configure setup", "error", err)
+		slog.Error("configure setup failed")
 
 		writeJSONError(
 			w,
@@ -830,7 +830,7 @@ func (s *Server) updateSettings(
 			return
 		}
 
-		slog.Error("update settings", "error", err)
+		slog.Error("update settings failed")
 
 		writeJSONError(
 			w,
@@ -856,7 +856,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		slog.Error("encode HTTP response", "error", err)
+		slog.Error("encode HTTP response failed")
 	}
 }
 
