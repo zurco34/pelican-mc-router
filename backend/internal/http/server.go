@@ -83,7 +83,6 @@ type Server struct {
 	dashboardRefresh     DashboardRefresher
 	bootstrapAuth        BootstrapAuthorizer
 	managementAuth       DashboardAuthorizer
-	managementAuthSet    bool
 	actionLimiter        *actioncontrol.Limiter
 	routePolicies        RoutePolicyStore
 	operationalHistory   OperationalHistoryStore
@@ -232,12 +231,29 @@ func (s *Server) listOperationalHistory(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, operationalHistoryResponse{Events: operationalEventsResponse(events)})
 }
 
-type routePolicyRequest struct {
-	ServerUUID      string   `json:"server_uuid"`
-	PrimaryHostname string   `json:"primary_hostname"`
-	Aliases         []string `json:"aliases"`
-	Excluded        bool     `json:"excluded"`
-	Revision        int64    `json:"revision"`
+// Pointer fields distinguish an omitted required property from its valid zero
+// value. Route-policy updates deliberately support empty hostnames, empty alias
+// sets, and false exclusions, but clients must state each desired value.
+type routePolicyCreateRequest struct {
+	ServerUUID      *string   `json:"server_uuid"`
+	PrimaryHostname *string   `json:"primary_hostname"`
+	Aliases         *[]string `json:"aliases"`
+	Excluded        *bool     `json:"excluded"`
+}
+
+type routePolicyUpdateRequest struct {
+	PrimaryHostname *string   `json:"primary_hostname"`
+	Aliases         *[]string `json:"aliases"`
+	Excluded        *bool     `json:"excluded"`
+	Revision        *int64    `json:"revision"`
+}
+
+func (r routePolicyCreateRequest) valid() bool {
+	return r.ServerUUID != nil && r.PrimaryHostname != nil && r.Aliases != nil && r.Excluded != nil
+}
+
+func (r routePolicyUpdateRequest) valid() bool {
+	return r.PrimaryHostname != nil && r.Aliases != nil && r.Excluded != nil && r.Revision != nil
 }
 
 func (s *Server) listRoutePolicies(w http.ResponseWriter, r *http.Request) {
@@ -261,12 +277,17 @@ func (s *Server) createRoutePolicy(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
-	var request routePolicyRequest
+	var request routePolicyCreateRequest
 	if !decodeJSON(w, r, &request) {
 		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		return
 	}
-	policy, err := s.routePolicies.Create(r.Context(), routepolicy.Policy{ServerUUID: request.ServerUUID, PrimaryHostname: request.PrimaryHostname, Aliases: request.Aliases, Excluded: request.Excluded})
+	if !request.valid() {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
+		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
+		return
+	}
+	policy, err := s.routePolicies.Create(r.Context(), routepolicy.Policy{ServerUUID: *request.ServerUUID, PrimaryHostname: *request.PrimaryHostname, Aliases: *request.Aliases, Excluded: *request.Excluded})
 	if errors.Is(err, routepolicy.ErrInvalid) {
 		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
@@ -287,12 +308,17 @@ func (s *Server) updateRoutePolicy(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "route policies not found")
 		return
 	}
-	var request routePolicyRequest
+	var request routePolicyUpdateRequest
 	if !decodeJSON(w, r, &request) {
 		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
 		return
 	}
-	policy, err := s.routePolicies.Update(r.Context(), routepolicy.Policy{ServerUUID: chi.URLParam(r, "serverUUID"), PrimaryHostname: request.PrimaryHostname, Aliases: request.Aliases, Excluded: request.Excluded}, request.Revision)
+	if !request.valid() {
+		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, actionhistory.OutcomeFailure)
+		writeJSONError(w, http.StatusBadRequest, "invalid route policy")
+		return
+	}
+	policy, err := s.routePolicies.Update(r.Context(), routepolicy.Policy{ServerUUID: chi.URLParam(r, "serverUUID"), PrimaryHostname: *request.PrimaryHostname, Aliases: *request.Aliases, Excluded: *request.Excluded}, *request.Revision)
 	if err != nil {
 		s.recordAction(r.Context(), actionhistory.ActionRoutePolicy, outcomeForError(err))
 	} else {
@@ -415,11 +441,10 @@ func (s *Server) WithDashboardAuthorization(authorizer DashboardAuthorizer) *Ser
 	return s
 }
 
-// WithManagementAuthorization enables the v0.3 management-plane policy.
+// WithManagementAuthorization installs the production management authorizer.
 // A nil authorizer deliberately leaves management routes unavailable.
 func (s *Server) WithManagementAuthorization(authorizer DashboardAuthorizer) *Server {
 	s.managementAuth = authorizer
-	s.managementAuthSet = true
 	return s
 }
 
@@ -433,10 +458,6 @@ func (s *Server) managementOperator(next http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) managementAuthorize(next http.HandlerFunc, operator bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.managementAuthSet {
-			next(w, r)
-			return
-		}
 		if s.managementAuth == nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "management authentication unavailable")
 			return

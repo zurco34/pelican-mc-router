@@ -3,8 +3,9 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -23,7 +24,10 @@ func NewTicker() *Ticker {
 	return &Ticker{}
 }
 
-// Run blocks until the context is cancelled or the task returns an error.
+// Run blocks until the context is cancelled. Scheduled task failures are
+// recoverable: the task is invoked again on the next normal interval. Startup
+// reconciliation is intentionally performed outside the scheduler and remains
+// fatal to application startup.
 //
 // The task is first executed after one complete interval. Initial runtime
 // setup remains the responsibility of the application startup process.
@@ -50,10 +54,12 @@ func (t *Ticker) Run(
 
 		case <-ticker.C:
 			if err := task.Run(ctx); err != nil {
-				return fmt.Errorf(
-					"run scheduled task: %w",
-					err,
-				)
+				if ctx.Err() != nil {
+					return nil
+				}
+				// Task implementations own state tracking. Do not log an error
+				// value here because it can carry control-plane topology.
+				log.Warn().Msg("scheduled reconciliation failed")
 			}
 		}
 	}

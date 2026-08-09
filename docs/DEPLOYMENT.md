@@ -106,7 +106,7 @@ PELICAN_MC_ROUTER_DASHBOARD_AUTH_REQUIRED_ROLE=viewer
 PELICAN_MC_ROUTER_DASHBOARD_AUTH_OPERATOR_ROLE=operator
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.5
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.6
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -167,6 +167,12 @@ next scheduled reconciliation remains the safe recovery path for mutations.
 Keep retry values bounded: higher values increase the time before a failed
 reconciliation is reported and can delay shutdown until request contexts are
 cancelled.
+
+After startup, an ordinary scheduled reconciliation failure does not stop the
+service. It preserves the last-known-good runtime, reports unhealthy readiness,
+and retries at the next configured interval. A later successful reconciliation
+restores readiness; process termination still cancels an in-flight refresh
+promptly.
 
 ## Start the stack
 
@@ -408,7 +414,7 @@ test -n "$volume_name"
 docker compose stop pelican-mc-router
 docker run --rm --entrypoint sqlite-recovery \
   -v "$volume_name:/data:ro" \
-  ghcr.io/zurco34/pelican-mc-router:1.0.5 \
+  ghcr.io/zurco34/pelican-mc-router:1.0.6 \
   -operation integrity -source /data/pelican-mc-router.db
 
 # Mount a separate writable, operator-protected backup directory for backup or
@@ -542,7 +548,7 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.5
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.6
 ```
 
 Change the tag to the exact release being installed.

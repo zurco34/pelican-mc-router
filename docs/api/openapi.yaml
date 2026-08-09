@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pelican MC Router API
-  version: 1.0.5
+  version: 1.0.6
   description: Stable v1 management API. Credentials and raw backend diagnostics are never returned.
 paths:
   /health:
@@ -26,7 +26,7 @@ paths:
   /api/v1/status:
     get: {operationId: getStatus, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/Status'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /dashboard:
-    get: {operationId: dashboard, security: [{oidcBearer: []}], responses: {'200': {description: Read-only operations dashboard, content: {text/html: {schema: {type: string}}}}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}}}
+    get: {operationId: dashboard, security: [{oidcBearer: []}], responses: {'200': {description: Read-only operations dashboard, content: {text/html: {schema: {type: string}}}}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/servers:
     get: {operationId: listServers, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/Servers'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/routes:
@@ -46,9 +46,9 @@ paths:
       parameters: [{$ref: '#/components/parameters/HistoryLimit'}]
       responses: {'200': {$ref: '#/components/responses/ActionHistory'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /api/v1/dashboard/reconcile:
-    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '408': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
+    post: {operationId: reconcileDashboard, security: [{oidcBearer: []}], parameters: [{name: X-Pelican-MC-Router-CSRF, in: header, required: true, schema: {type: string, enum: ['1']}}], responses: {'200': {$ref: '#/components/responses/ManualReconcile'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '408': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/settings:
-    put: {operationId: updateSettings, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SettingsRequest'}}}}, responses: {'204': {description: Settings activated}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '409': {description: Setup has not been completed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}}}
+    put: {operationId: updateSettings, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SettingsRequest'}}}}, responses: {'204': {description: Settings activated}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '409': {description: Setup has not been completed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}, '429': {$ref: '#/components/responses/Error'}, '500': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
   /api/v1/route-policies:
     get: {operationId: listRoutePolicies, security: [{oidcBearer: []}], responses: {'200': {$ref: '#/components/responses/RoutePolicies'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}
     post: {operationId: createRoutePolicy, security: [{oidcBearer: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RoutePolicyCreateRequest'}}}}, responses: {'201': {$ref: '#/components/responses/RoutePolicy'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}}

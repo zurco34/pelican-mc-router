@@ -24,7 +24,7 @@ func TestOpenAPIContractMatchesRegisteredRoutes(t *testing.T) {
 		t.Fatalf("validate OpenAPI document: %v", err)
 	}
 
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	registered := map[string]bool{}
 	routes, ok := server.Router().(chi.Routes)
 	if !ok {
@@ -120,7 +120,7 @@ func TestOpenAPIManualReconcileUnavailableResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil))
 	if recorder.Code != http.StatusNotFound || !strings.HasPrefix(recorder.Header().Get("Content-Type"), "application/json") {
@@ -173,6 +173,56 @@ func TestOpenAPISeparatesStrictRequestsFromAdditiveResponses(t *testing.T) {
 	for _, name := range []string{"ActionHistory", "ManualReconcile"} {
 		if has := document.Components.Schemas[name].Value.AdditionalProperties.Has; has != nil && *has {
 			t.Fatalf("%s response must permit additive fields", name)
+		}
+	}
+}
+
+func TestOpenAPIRouteAuthorizationClassesAreExplicit(t *testing.T) {
+	loader := openapi3.NewLoader()
+	document, err := loader.LoadFromFile(filepath.Join("..", "..", "..", "docs", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	classes := map[string]string{
+		"GET /health":                                "public",
+		"GET /ready":                                 "public",
+		"GET /metrics":                               "public",
+		"GET /api/v1/setup":                          "bootstrapBearer",
+		"POST /api/v1/setup":                         "bootstrapBearer",
+		"GET /api/v1/status":                         "oidcBearer",
+		"GET /dashboard":                             "oidcBearer",
+		"GET /api/v1/servers":                        "oidcBearer",
+		"GET /api/v1/routes":                         "oidcBearer",
+		"GET /api/v1/routes/preview":                 "oidcBearer",
+		"GET /api/v1/route-policies":                 "oidcBearer",
+		"POST /api/v1/route-policies":                "oidcBearer",
+		"PUT /api/v1/route-policies/{serverUUID}":    "oidcBearer",
+		"DELETE /api/v1/route-policies/{serverUUID}": "oidcBearer",
+		"GET /api/v1/operational-history":            "oidcBearer",
+		"GET /api/v1/action-history":                 "oidcBearer",
+		"POST /api/v1/dashboard/reconcile":           "oidcBearer",
+		"PUT /api/v1/settings":                       "oidcBearer",
+	}
+	for key, want := range classes {
+		parts := strings.SplitN(key, " ", 2)
+		operation := document.Paths.Find(parts[1]).GetOperation(parts[0])
+		if operation == nil {
+			t.Errorf("%s is absent from OpenAPI", key)
+			continue
+		}
+		if want == "public" {
+			if operation.Security != nil && len(*operation.Security) != 0 {
+				t.Errorf("%s unexpectedly has security", key)
+			}
+			continue
+		}
+		if operation.Security == nil || len(*operation.Security) != 1 {
+			t.Errorf("%s security = %#v, want %s", key, operation.Security, want)
+			continue
+		}
+		if _, ok := (*operation.Security)[0][want]; !ok {
+			t.Errorf("%s security = %#v, want %s", key, operation.Security, want)
 		}
 	}
 }

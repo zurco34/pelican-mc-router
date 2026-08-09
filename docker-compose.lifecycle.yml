@@ -1,0 +1,17 @@
+services:
+  fake-pelican:
+    build:
+      context: ./tests/compose-lifecycle
+      dockerfile: Dockerfile
+    networks:
+      - router-control
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  pelican-mc-router:
+    depends_on:
+      - mc-router
+      - fake-pelican

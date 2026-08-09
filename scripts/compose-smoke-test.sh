@@ -244,46 +244,6 @@ container_exec \
   pelican-mc-router \
   test -x /usr/local/bin/sqlite-recovery
 
-log "Creating route through private mc-router API"
-
-readonly ROUTE_HOSTNAME="smoke-test.mc.example.com"
-readonly ROUTE_BACKEND="127.0.0.1:25565"
-
-route_payload="$(
-  printf \
-    '{"serverAddress":"%s","backend":"%s"}' \
-    "${ROUTE_HOSTNAME}" \
-    "${ROUTE_BACKEND}"
-)"
-
-container_exec \
-  pelican-mc-router \
-  wget \
-  -q \
-  -O /dev/null \
-  --header='Content-Type: application/json' \
-  --post-data="${route_payload}" \
-  http://mc-router:8080/routes
-
-log "Reading routes through private mc-router API"
-
-routes="$(
-  container_exec \
-    pelican-mc-router \
-    wget \
-    -q \
-    -O - \
-    http://mc-router:8080/routes
-)"
-
-printf '%s\n' "${routes}"
-
-grep -Fq "${ROUTE_HOSTNAME}" <<<"${routes}" ||
-  fail "created hostname was not returned by mc-router"
-
-grep -Fq "${ROUTE_BACKEND}" <<<"${routes}" ||
-  fail "created backend was not returned by mc-router"
-
 log "Verifying application remains healthy"
 
 curl \
