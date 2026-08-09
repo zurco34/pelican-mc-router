@@ -288,6 +288,43 @@ database:
 	}
 }
 
+func TestLoadDashboardAuthFromEnvironment(t *testing.T) {
+	workingDirectory := changeWorkingDirectory(t, t.TempDir())
+	defer workingDirectory()
+
+	const (
+		issuer   = "https://auth.example.test/application/o/pelican-mc-router/"
+		audience = "pelican-mc-router-client"
+	)
+
+	t.Setenv("PELICAN_MC_ROUTER_DASHBOARD_AUTH_ENABLED", "true")
+	t.Setenv("PELICAN_MC_ROUTER_DASHBOARD_AUTH_ISSUER_URL", issuer)
+	t.Setenv("PELICAN_MC_ROUTER_DASHBOARD_AUTH_AUDIENCE", audience)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.DashboardAuth.Enabled {
+		t.Error("DashboardAuth.Enabled = false, want true")
+	}
+	if cfg.DashboardAuth.IssuerURL != issuer {
+		t.Errorf(
+			"DashboardAuth.IssuerURL = %q, want %q",
+			cfg.DashboardAuth.IssuerURL,
+			issuer,
+		)
+	}
+	if cfg.DashboardAuth.Audience != audience {
+		t.Errorf(
+			"DashboardAuth.Audience = %q, want %q",
+			cfg.DashboardAuth.Audience,
+			audience,
+		)
+	}
+}
+
 func changeWorkingDirectory(
 	t *testing.T,
 	directory string,
