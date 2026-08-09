@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.6 - 2026-08-09
+
+### Fixed
+
+- Management API routes now fail closed when an authorizer is unavailable;
+  public liveness, readiness, and metrics endpoints remain operational.
+- Periodic reconciliation failures preserve the last-known-good runtime, mark
+  readiness unhealthy, and retry at the configured interval instead of
+  terminating the process.
+- Route-policy requests now distinguish omitted required fields from explicit
+  zero values, matching the stable OpenAPI contract.
+
+### Changed
+
+- OpenAPI documentation now records management-auth unavailability and the
+  dashboard reconciliation CSRF header.
+- Corrected the historical v1.0.5 release notes: pending-setup generation
+  restaging shipped in v1.0.5. The immutable v1.0.5 tag is unchanged.
+
+### Upgrade notes
+
+- Back up the SQLite volume before upgrade. Migrations are forward-only; use a
+  verified pre-upgrade backup when a rollback requires an older binary.
+
 ## 1.0.5 - 2026-08-09
 
 ### Fixed
@@ -9,6 +33,8 @@
 - The versioned API contract distinguishes route-policy create and update
   requests, documents settings-before-setup conflicts, and preserves additive
   response compatibility.
+- Pending setup restaging replaces the candidate generation, preventing a
+  stale candidate from being promoted during retry.
 
 ### Added
 
