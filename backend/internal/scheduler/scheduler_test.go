@@ -114,29 +114,39 @@ func TestTickerRunStopsWhenContextIsCancelled(t *testing.T) {
 	}
 }
 
-func TestTickerRunReturnsTaskError(t *testing.T) {
+func TestTickerRunRetriesTaskAfterFailure(t *testing.T) {
 	ticker := NewTicker()
-
-	errTaskFailed := errors.New("task failed")
-
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		time.Second,
-	)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := ticker.Run(
-		ctx,
-		time.Millisecond,
-		taskFunc(func(context.Context) error {
-			return errTaskFailed
-		}),
-	)
+	calls := make(chan struct{}, 3)
+	done := make(chan error, 1)
+	count := 0
+	go func() {
+		done <- ticker.Run(ctx, time.Millisecond, taskFunc(func(context.Context) error {
+			count++
+			calls <- struct{}{}
+			if count == 1 {
+				return errors.New("transient task failure")
+			}
+			cancel()
+			return nil
+		}))
+	}()
 
-	if !errors.Is(err, errTaskFailed) {
-		t.Fatalf(
-			"Run() error = %v, want errors.Is(error, errTaskFailed)",
-			err,
-		)
+	for i := 0; i < 2; i++ {
+		select {
+		case <-calls:
+		case <-time.After(time.Second):
+			t.Fatal("scheduled task was not retried")
+		}
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v, want nil", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not stop after cancellation")
 	}
 }

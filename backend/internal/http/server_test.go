@@ -197,7 +197,7 @@ func newTestServer(
 		setupService,
 		runtime.NewReconciliationTracker(),
 		http.NotFoundHandler(),
-	).WithBootstrapAuthorization(&fakeBootstrapAuthorizer{})
+	).WithBootstrapAuthorization(&fakeBootstrapAuthorizer{}).WithManagementAuthorization(fakeDashboardAuthorizer{})
 }
 
 func TestHealthHandler(t *testing.T) {
@@ -262,6 +262,32 @@ func TestRouteAuthorizationClasses(t *testing.T) {
 				t.Fatalf("status = %d, want %d", recorder.Code, test.want)
 			}
 		})
+	}
+}
+
+func TestManagementRoutesFailClosedWithoutAuthorizer(t *testing.T) {
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	for _, path := range []string{
+		"/api/v1/status",
+		"/api/v1/servers",
+		"/api/v1/routes",
+		"/api/v1/route-policies",
+	} {
+		recorder := httptest.NewRecorder()
+		server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusServiceUnavailable {
+			t.Errorf("GET %s status = %d, want %d", path, recorder.Code, http.StatusServiceUnavailable)
+		}
+		if got := recorder.Body.String(); strings.Contains(got, "secret") || !strings.Contains(got, "management authentication unavailable") {
+			t.Errorf("GET %s body = %q, want sanitized authentication error", path, got)
+		}
+	}
+	for _, path := range []string{"/health", "/ready", "/metrics"} {
+		recorder := httptest.NewRecorder()
+		server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code == http.StatusServiceUnavailable && path != "/ready" {
+			t.Errorf("GET %s unexpectedly required management authentication", path)
+		}
 	}
 }
 
@@ -334,7 +360,7 @@ func TestDashboardPageRendersCachedSafeState(t *testing.T) {
 			LastError:       &secret,
 		}}},
 		buildinfo.Info{Version: "0.2.0-dev", Revision: "abc123"},
-	))
+	)).WithManagementAuthorization(fakeDashboardAuthorizer{})
 
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
@@ -367,7 +393,7 @@ func TestDashboardPageUnavailableDoesNotExposeSetupError(t *testing.T) {
 		&fakeSetupService{err: errors.New(secret)},
 		runtime.NewReconciliationTracker(),
 		buildinfo.Info{},
-	))
+	)).WithManagementAuthorization(fakeDashboardAuthorizer{})
 
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
@@ -395,7 +421,7 @@ func TestDashboardPageAuthorization(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithDashboard(
 				dashboard.NewService(&fakeSetupService{}, runtime.NewReconciliationTracker(), buildinfo.Info{}),
-			).WithDashboardAuthorization(test.authorizer)
+			).WithDashboardAuthorization(test.authorizer).WithManagementAuthorization(test.authorizer)
 			recorder := httptest.NewRecorder()
 			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
 			if recorder.Code != test.wantStatus {
@@ -432,7 +458,7 @@ func TestDashboardManualReconcile(t *testing.T) {
 				&fakeSetupService{},
 				runtime.NewReconciliationTracker(),
 				http.NotFoundHandler(),
-			).WithDashboardAuthorization(test.authorizer).WithDashboardActions(refresher)
+			).WithDashboardAuthorization(test.authorizer).WithManagementAuthorization(test.authorizer).WithDashboardActions(refresher)
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil)
 			request.Header.Set(dashboardCSRFHeader, test.header)
 			recorder := httptest.NewRecorder()
@@ -452,7 +478,7 @@ func TestDashboardManualReconcile(t *testing.T) {
 }
 
 func TestDashboardManualReconcileUnavailableUsesJSONError(t *testing.T) {
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil))
 	if recorder.Code != http.StatusNotFound {
@@ -502,7 +528,7 @@ func TestStatusEndpointIncludesBuildIdentity(t *testing.T) {
 		runtime.NewReconciliationTracker(),
 		http.NotFoundHandler(),
 		buildinfo.Info{Version: "0.1.3", Revision: "abc123"},
-	)
+	).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
 
@@ -542,7 +568,7 @@ func TestStatusEndpoint(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			provider := &fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{test.status}}
-			server := NewServer(runtime.New(), test.setup, provider, http.NotFoundHandler())
+			server := NewServer(runtime.New(), test.setup, provider, http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 			recorder := httptest.NewRecorder()
 			server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
 			raw := recorder.Body.Bytes()
@@ -584,7 +610,7 @@ func TestStatusEndpointUsesOneSnapshot(t *testing.T) {
 	success := runtime.ReconciliationOutcomeSuccess
 	failure := runtime.ReconciliationOutcomeFailure
 	provider := &fakeStatusProvider{snapshots: []runtime.ReconciliationStatus{{LastOutcome: &success}, {LastOutcome: &failure}}}
-	server := NewServer(runtime.New(), &fakeSetupService{completed: true}, provider, http.NotFoundHandler())
+	server := NewServer(runtime.New(), &fakeSetupService{completed: true}, provider, http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
 	if provider.calls != 1 {
@@ -1727,7 +1753,7 @@ func TestListRoutesSetupIncomplete(t *testing.T) {
 
 func TestOperationalHistoryEndpointIsBoundedAndSafe(t *testing.T) {
 	store := &fakeOperationalHistoryStore{events: []operationalhistory.Event{{Kind: operationalhistory.KindReconciliation, Outcome: operationalhistory.OutcomeSuccess, Desired: 2}}}
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithOperationalHistory(store)
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithOperationalHistory(store).WithManagementAuthorization(fakeDashboardAuthorizer{})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/operational-history?limit=1", nil)
 	recorder := httptest.NewRecorder()
@@ -1752,7 +1778,7 @@ func TestOperationalHistoryEndpointIsBoundedAndSafe(t *testing.T) {
 
 func TestActionHistoryEndpointIsBoundedAndDTOBacked(t *testing.T) {
 	reader := &fakeActionHistoryReader{events: []actionhistory.Event{{OccurredAt: time.Date(2026, time.January, 1, 1, 2, 3, 4, time.UTC), Action: actionhistory.ActionSetup, Outcome: actionhistory.OutcomeSuccess}}}
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithActionHistoryReader(reader)
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithActionHistoryReader(reader).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/action-history?limit=1", nil))
 	if recorder.Code != http.StatusOK || reader.limit != 1 {
@@ -1786,7 +1812,7 @@ func TestRoutePolicyActionsAreRecordedWithFixedOutcomes(t *testing.T) {
 			handler: func(server *Server, w http.ResponseWriter, r *http.Request) {
 				server.createRoutePolicy(w, r)
 			},
-			request: httptest.NewRequest(http.MethodPost, "/api/v1/route-policies", strings.NewReader(`{"server_uuid":"server","primary_hostname":"play.example.test"}`)),
+			request: httptest.NewRequest(http.MethodPost, "/api/v1/route-policies", strings.NewReader(`{"server_uuid":"server","primary_hostname":"play.example.test","aliases":[],"excluded":false}`)),
 			store:   &fakeRoutePolicyStore{},
 			want:    actionhistory.OutcomeSuccess,
 		},
@@ -1804,7 +1830,7 @@ func TestRoutePolicyActionsAreRecordedWithFixedOutcomes(t *testing.T) {
 			handler: func(server *Server, w http.ResponseWriter, r *http.Request) {
 				server.updateRoutePolicy(w, r)
 			},
-			request: httptest.NewRequest(http.MethodPut, "/api/v1/route-policies/server", strings.NewReader(`{"revision":1}`)),
+			request: httptest.NewRequest(http.MethodPut, "/api/v1/route-policies/server", strings.NewReader(`{"primary_hostname":"","aliases":[],"excluded":false,"revision":1}`)),
 			store:   &fakeRoutePolicyStore{err: context.Canceled},
 			want:    actionhistory.OutcomeCanceled,
 		},
@@ -1831,6 +1857,36 @@ func TestRoutePolicyActionsAreRecordedWithFixedOutcomes(t *testing.T) {
 			event := writer.events[0]
 			if event.Action != actionhistory.ActionRoutePolicy || event.Outcome != test.want {
 				t.Fatalf("recorded event = %#v, want route policy/%s", event, test.want)
+			}
+		})
+	}
+}
+
+func TestRoutePolicyRequestsRequireExplicitDesiredFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   int
+	}{
+		{"create omitted aliases", http.MethodPost, "/api/v1/route-policies", `{"server_uuid":"server","primary_hostname":"","excluded":false}`, http.StatusBadRequest},
+		{"create explicit zero values", http.MethodPost, "/api/v1/route-policies", `{"server_uuid":"server","primary_hostname":"","aliases":[],"excluded":false}`, http.StatusCreated},
+		{"update omitted exclusion", http.MethodPut, "/api/v1/route-policies/server", `{"primary_hostname":"","aliases":[],"revision":1}`, http.StatusBadRequest},
+		{"update explicit zero values", http.MethodPut, "/api/v1/route-policies/server", `{"primary_hostname":"","aliases":[],"excluded":false,"revision":1}`, http.StatusOK},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithRoutePolicies(&fakeRoutePolicyStore{})
+			request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			recorder := httptest.NewRecorder()
+			if test.method == http.MethodPost {
+				server.createRoutePolicy(recorder, request)
+			} else {
+				server.updateRoutePolicy(recorder, request)
+			}
+			if recorder.Code != test.want {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, test.want, recorder.Body.String())
 			}
 		})
 	}

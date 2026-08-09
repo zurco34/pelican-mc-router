@@ -24,7 +24,7 @@ func TestOpenAPIContractMatchesRegisteredRoutes(t *testing.T) {
 		t.Fatalf("validate OpenAPI document: %v", err)
 	}
 
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	registered := map[string]bool{}
 	routes, ok := server.Router().(chi.Routes)
 	if !ok {
@@ -120,7 +120,7 @@ func TestOpenAPIManualReconcileUnavailableResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler())
+	server := NewServer(runtime.New(), &fakeSetupService{}, runtime.NewReconciliationTracker(), http.NotFoundHandler()).WithManagementAuthorization(fakeDashboardAuthorizer{})
 	recorder := httptest.NewRecorder()
 	server.Router().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/dashboard/reconcile", nil))
 	if recorder.Code != http.StatusNotFound || !strings.HasPrefix(recorder.Header().Get("Content-Type"), "application/json") {
