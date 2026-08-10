@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.7 - 2026-08-10
+
+### Fixed
+
+- Management OIDC configuration now loads issuer and audience values supplied
+  through the documented environment variables, allowing OIDC-enabled startup
+  while preserving existing fail-closed validation.
+
+### Upgrade notes
+
+- Upgrade to v1.0.7 before enabling management OIDC through environment-only
+  configuration. No database migration or API contract change is introduced.
+- Back up the SQLite volume before upgrade. Migrations are forward-only; use a
+  verified pre-upgrade backup when a rollback requires an older binary.
+
 ## 1.0.6 - 2026-08-09
 
 ### Fixed
