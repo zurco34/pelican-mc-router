@@ -63,6 +63,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("secrets.bootstrap_token_name", "bootstrap-token")
 
 	v.SetDefault("dashboard_auth.enabled", false)
+	v.SetDefault("dashboard_auth.issuer_url", "")
+	v.SetDefault("dashboard_auth.audience", "")
 	v.SetDefault("dashboard_auth.role_claim", "roles")
 	v.SetDefault("dashboard_auth.required_role", "viewer")
 	v.SetDefault("dashboard_auth.operator_role", "operator")
