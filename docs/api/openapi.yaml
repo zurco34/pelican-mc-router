@@ -4,6 +4,20 @@ info:
   version: 1.0.7
   description: Stable v1 management API. Credentials and raw backend diagnostics are never returned.
 paths:
+  /:
+    get:
+      operationId: dashboardRedirect
+      summary: Redirect to the authenticated dashboard
+      security: [{oidcBearer: []}]
+      responses:
+        '307':
+          description: Redirect to dashboard
+          headers:
+            Location:
+              description: Dashboard path
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
   /health:
     get: {operationId: health, summary: Process liveness, responses: {'200': {$ref: '#/components/responses/Health'}}}
   /ready:

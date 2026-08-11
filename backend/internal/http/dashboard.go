@@ -29,11 +29,206 @@ var dashboardTemplate = template.Must(template.New("dashboard").Funcs(template.F
 		return value.UTC().Format(time.RFC3339)
 	},
 }).Parse(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pelican MC Router</title><style>body{font:16px system-ui,sans-serif;max-width:56rem;margin:3rem auto;padding:0 1rem;color:#172033}section{border:1px solid #d6dbe4;border-radius:.5rem;padding:1rem;margin:1rem 0}dl{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem}dt{font-weight:600}.ok{color:#087443}.bad{color:#a72c2c}</style></head>
-<body><h1>Pelican MC Router</h1><p class="{{if .Ready}}ok{{else}}bad{{end}}">{{if .Ready}}Ready{{else}}Not ready{{end}}: {{.ReadinessReason}}</p>
-<section><h2>Build</h2><dl><dt>Version</dt><dd>{{.Build.Version}}</dd><dt>Revision</dt><dd>{{.Build.Revision}}</dd></dl></section>
-<section><h2>Reconciliation</h2><dl><dt>In progress</dt><dd>{{.Reconciliation.InProgress}}</dd><dt>Outcome</dt><dd>{{value .Reconciliation.LastOutcome}}</dd><dt>Last completed</dt><dd>{{timestamp .Reconciliation.LastCompletedAt}}</dd><dt>Consecutive failures</dt><dd>{{.Reconciliation.ConsecutiveFailures}}</dd><dt>Desired routes</dt><dd>{{.Reconciliation.RouteChanges.Desired}}</dd><dt>Created</dt><dd>{{.Reconciliation.RouteChanges.Created}}</dd><dt>Updated</dt><dd>{{.Reconciliation.RouteChanges.Updated}}</dd><dt>Deleted</dt><dd>{{.Reconciliation.RouteChanges.Deleted}}</dd></dl>{{if .ManualReconciliationEnabled}}<button id="reconcile" type="button">Reconcile now</button><p id="reconcile-result" aria-live="polite"></p><script>document.getElementById("reconcile").addEventListener("click",async function(){const b=this;b.disabled=true;const r=document.getElementById("reconcile-result");try{const x=await fetch("/api/v1/dashboard/reconcile",{method:"POST",headers:{"X-Pelican-MC-Router-CSRF":"1"}});r.textContent=x.ok?"Reconciliation completed.":"Reconciliation unavailable."}catch(_){r.textContent="Reconciliation unavailable."}finally{b.disabled=false}});</script>{{end}}</section><section><h2>Recent activity</h2>{{if .Events}}<ul>{{range .Events}}<li>{{.OccurredAt.UTC.Format "2006-01-02T15:04:05Z07:00"}} — {{.Kind}}: {{.Outcome}} (desired {{.Desired}}, changed {{.Changed}})</li>{{end}}</ul>{{else}}<p>No recorded activity.</p>{{end}}</section></body></html>`))
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pelican MC Router</title>
+<script>
+(function(){
+	const key="pelican-mc-router-theme";
+	try {
+		const theme=localStorage.getItem(key);
+		if(theme==="light"||theme==="dark"){
+			document.documentElement.dataset.theme=theme;
+		}
+	} catch(_) {}
+})();
+</script>
+<style>
+:root{
+	color-scheme:light;
+	--background:#f5f7fa;
+	--surface:#ffffff;
+	--text:#172033;
+	--muted:#5d6678;
+	--border:#d6dbe4;
+	--button:#eef2f7;
+	--button-hover:#e2e8f0;
+	--ok:#087443;
+	--bad:#a72c2c;
+}
+:root[data-theme="dark"]{
+	color-scheme:dark;
+	--background:#0d1117;
+	--surface:#161b22;
+	--text:#e6edf3;
+	--muted:#8b949e;
+	--border:#30363d;
+	--button:#21262d;
+	--button-hover:#30363d;
+	--ok:#3fb950;
+	--bad:#f85149;
+}
+@media (prefers-color-scheme:dark){
+	:root:not([data-theme]){
+		color-scheme:dark;
+		--background:#0d1117;
+		--surface:#161b22;
+		--text:#e6edf3;
+		--muted:#8b949e;
+		--border:#30363d;
+		--button:#21262d;
+		--button-hover:#30363d;
+		--ok:#3fb950;
+		--bad:#f85149;
+	}
+}
+html{
+	background:var(--background);
+}
+body{
+	font:16px system-ui,sans-serif;
+	max-width:56rem;
+	margin:3rem auto;
+	padding:0 1rem;
+	background:var(--background);
+	color:var(--text);
+}
+header{
+	display:flex;
+	align-items:center;
+	justify-content:space-between;
+	gap:1rem;
+}
+h1{
+	margin:0;
+}
+section{
+	background:var(--surface);
+	border:1px solid var(--border);
+	border-radius:.5rem;
+	padding:1rem;
+	margin:1rem 0;
+}
+dl{
+	display:grid;
+	grid-template-columns:max-content 1fr;
+	gap:.5rem 1rem;
+}
+dt{
+	font-weight:600;
+}
+dd{
+	margin-inline-start:0;
+}
+button{
+	font:inherit;
+	color:var(--text);
+	background:var(--button);
+	border:1px solid var(--border);
+	border-radius:.4rem;
+	padding:.45rem .7rem;
+	cursor:pointer;
+}
+button:hover{
+	background:var(--button-hover);
+}
+button:focus-visible{
+	outline:2px solid currentColor;
+	outline-offset:2px;
+}
+button:disabled{
+	cursor:not-allowed;
+	opacity:.65;
+}
+.ok{
+	color:var(--ok);
+}
+.bad{
+	color:var(--bad);
+}
+#reconcile-result{
+	color:var(--muted);
+}
+@media (max-width:36rem){
+	body{
+		margin:1.5rem auto;
+	}
+	header{
+		align-items:flex-start;
+	}
+	dl{
+		grid-template-columns:1fr;
+		gap:.2rem;
+	}
+	dd{
+		margin-bottom:.6rem;
+	}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>Pelican MC Router</h1>
+<button id="theme-toggle" type="button">Dark mode</button>
+</header>
+<p class="{{if .Ready}}ok{{else}}bad{{end}}">{{if .Ready}}Ready{{else}}Not ready{{end}}: {{.ReadinessReason}}</p>
+<section>
+<h2>Build</h2>
+<dl><dt>Version</dt><dd>{{.Build.Version}}</dd><dt>Revision</dt><dd>{{.Build.Revision}}</dd></dl>
+</section>
+<section>
+<h2>Reconciliation</h2>
+<dl><dt>In progress</dt><dd>{{.Reconciliation.InProgress}}</dd><dt>Outcome</dt><dd>{{value .Reconciliation.LastOutcome}}</dd><dt>Last completed</dt><dd>{{timestamp .Reconciliation.LastCompletedAt}}</dd><dt>Consecutive failures</dt><dd>{{.Reconciliation.ConsecutiveFailures}}</dd><dt>Desired routes</dt><dd>{{.Reconciliation.RouteChanges.Desired}}</dd><dt>Created</dt><dd>{{.Reconciliation.RouteChanges.Created}}</dd><dt>Updated</dt><dd>{{.Reconciliation.RouteChanges.Updated}}</dd><dt>Deleted</dt><dd>{{.Reconciliation.RouteChanges.Deleted}}</dd></dl>
+{{if .ManualReconciliationEnabled}}<button id="reconcile" type="button">Reconcile now</button><p id="reconcile-result" aria-live="polite"></p><script>document.getElementById("reconcile").addEventListener("click",async function(){const b=this;b.disabled=true;const r=document.getElementById("reconcile-result");try{const x=await fetch("/api/v1/dashboard/reconcile",{method:"POST",headers:{"X-Pelican-MC-Router-CSRF":"1"}});r.textContent=x.ok?"Reconciliation completed.":"Reconciliation unavailable."}catch(_){r.textContent="Reconciliation unavailable."}finally{b.disabled=false}});</script>{{end}}
+</section>
+<section>
+<h2>Recent activity</h2>
+{{if .Events}}<ul>{{range .Events}}<li>{{.OccurredAt.UTC.Format "2006-01-02T15:04:05Z07:00"}} — {{.Kind}}: {{.Outcome}} (desired {{.Desired}}, changed {{.Changed}})</li>{{end}}</ul>{{else}}<p>No recorded activity.</p>{{end}}
+</section>
+<script>
+(function(){
+	const key="pelican-mc-router-theme";
+	const root=document.documentElement;
+	const toggle=document.getElementById("theme-toggle");
+	const systemDark=window.matchMedia("(prefers-color-scheme: dark)");
+
+	function effectiveTheme(){
+		if(root.dataset.theme==="light"||root.dataset.theme==="dark"){
+			return root.dataset.theme;
+		}
+		return systemDark.matches?"dark":"light";
+	}
+
+	function updateToggle(){
+		const dark=effectiveTheme()==="dark";
+		toggle.textContent=dark?"Light mode":"Dark mode";
+		toggle.setAttribute("aria-label",dark?"Switch to light mode":"Switch to dark mode");
+	}
+
+	toggle.addEventListener("click",function(){
+		const next=effectiveTheme()==="dark"?"light":"dark";
+		root.dataset.theme=next;
+		try {
+			localStorage.setItem(key,next);
+		} catch(_) {}
+		updateToggle();
+	});
+
+	if(typeof systemDark.addEventListener==="function"){
+		systemDark.addEventListener("change",function(){
+			if(!root.dataset.theme){
+				updateToggle();
+			}
+		});
+	}
+
+	updateToggle();
+})();
+</script>
+</body>
+</html>`))
 
 type dashboardPageModel struct {
 	dashboard.Snapshot
