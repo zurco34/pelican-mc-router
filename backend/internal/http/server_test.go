@@ -443,11 +443,28 @@ func TestDashboardPageRendersCachedSafeState(t *testing.T) {
 		t.Fatalf("content type = %q", got)
 	}
 	body := recorder.Body.String()
-	for _, want := range []string{"Pelican MC Router", "Ready", "0.2.0-dev", "abc123"} {
+	for _, want := range []string{
+		"Pelican MC Router",
+		"Ready",
+		"0.2.0-dev",
+		"abc123",
+		`id="theme-toggle"`,
+		`pelican-mc-router-theme`,
+		`localStorage.getItem(key)`,
+		`localStorage.setItem(key,next)`,
+		`prefers-color-scheme:dark`,
+		`:root[data-theme="dark"]`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard response does not contain %q: %s", want, body)
 		}
 	}
+	themeInit := strings.Index(body, `localStorage.getItem(key)`)
+	styleStart := strings.Index(body, `<style>`)
+	if themeInit < 0 || styleStart < 0 || themeInit > styleStart {
+		t.Fatalf("theme initialization must run before dashboard styles")
+	}
+
 	if strings.Contains(body, secret) {
 		t.Fatalf("dashboard exposed secret: %s", body)
 	}
