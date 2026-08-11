@@ -343,6 +343,77 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+func TestRootRedirectsToDashboard(t *testing.T) {
+	server := NewServer(
+		runtime.New(),
+		&fakeSetupService{},
+		runtime.NewReconciliationTracker(),
+		http.NotFoundHandler(),
+	).WithManagementAuthorization(fakeDashboardAuthorizer{})
+
+	recorder := httptest.NewRecorder()
+	server.Router().ServeHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/", nil),
+	)
+
+	if recorder.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusTemporaryRedirect)
+	}
+	if got := recorder.Header().Get("Location"); got != "/dashboard" {
+		t.Fatalf("location = %q, want %q", got, "/dashboard")
+	}
+}
+
+func TestRootRedirectAuthorization(t *testing.T) {
+	tests := []struct {
+		name       string
+		authorizer fakeDashboardAuthorizer
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "unauthenticated",
+			authorizer: fakeDashboardAuthorizer{err: dashboardauth.ErrUnauthenticated},
+			wantStatus: http.StatusUnauthorized,
+			wantBody:   "dashboard authentication required",
+		},
+		{
+			name:       "forbidden",
+			authorizer: fakeDashboardAuthorizer{err: dashboardauth.ErrForbidden},
+			wantStatus: http.StatusForbidden,
+			wantBody:   "dashboard access denied",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := NewServer(
+				runtime.New(),
+				&fakeSetupService{},
+				runtime.NewReconciliationTracker(),
+				http.NotFoundHandler(),
+			).WithManagementAuthorization(test.authorizer)
+
+			recorder := httptest.NewRecorder()
+			server.Router().ServeHTTP(
+				recorder,
+				httptest.NewRequest(http.MethodGet, "/", nil),
+			)
+
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			if body := recorder.Body.String(); !strings.Contains(body, test.wantBody) {
+				t.Fatalf("response = %s, want %q", body, test.wantBody)
+			}
+			if got := recorder.Header().Get("Location"); got != "" {
+				t.Fatalf("unauthorized redirect location = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestDashboardPageRendersCachedSafeState(t *testing.T) {
 	completed := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
 	outcome := runtime.ReconciliationOutcomeSuccess

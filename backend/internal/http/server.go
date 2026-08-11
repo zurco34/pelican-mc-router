@@ -147,6 +147,7 @@ func NewServer(
 func (s *Server) Router() http.Handler {
 	router := chi.NewRouter()
 
+	router.Get("/", s.managementViewer(http.RedirectHandler("/dashboard", http.StatusTemporaryRedirect).ServeHTTP))
 	router.Get("/health", healthHandler)
 	router.Get("/metrics", s.metrics.ServeHTTP)
 	router.Get("/ready", s.ready)
