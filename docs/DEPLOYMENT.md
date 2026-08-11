@@ -106,7 +106,7 @@ PELICAN_MC_ROUTER_DASHBOARD_AUTH_REQUIRED_ROLE=viewer
 PELICAN_MC_ROUTER_DASHBOARD_AUTH_OPERATOR_ROLE=operator
 
 MC_ROUTER_IMAGE=docker.io/itzg/mc-router:1.44.0
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.7
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.1.0
 ```
 
 The `.env` file is ignored by Git and must not be committed.
@@ -394,11 +394,19 @@ Change `PELICAN_MC_ROUTER_BIND_ADDRESS` only when remote API access is
 required and protected by an authenticated reverse proxy or another trusted
 access-control layer.
 
-The read-only `/dashboard` follows the same boundary and must remain private or
-proxy-authenticated. It displays cached status only and does not trigger
-reconciliation. Direct public dashboard exposure is unsupported. See
-[ADR-0005](adr/ADR-0005-dashboard-security-model.md) for the security model and
-the prerequisites for future write actions.
+The `/dashboard` follows the same boundary and must remain private or
+proxy-authenticated. Authorized requests to `/` redirect to `/dashboard` with
+HTTP 307 under the same viewer authorization. Loading the dashboard displays
+cached status and does not itself trigger reconciliation; operators may use the
+explicit manual-reconciliation control when authorized.
+
+The dashboard follows the browser or operating-system light/dark preference
+until the user explicitly selects a theme. That explicit preference is stored
+only in browser `localStorage` and is not sent to the service. Direct public
+dashboard exposure remains unsupported. See
+[ADR-0005](adr/ADR-0005-dashboard-security-model.md) for the dashboard security
+boundary and [ADR-0006](adr/ADR-0006-dashboard-oidc-authorization.md) for OIDC
+viewer and operator authorization.
 
 ### Offline SQLite recovery
 
@@ -414,7 +422,7 @@ test -n "$volume_name"
 docker compose stop pelican-mc-router
 docker run --rm --entrypoint sqlite-recovery \
   -v "$volume_name:/data:ro" \
-  ghcr.io/zurco34/pelican-mc-router:1.0.7 \
+  ghcr.io/zurco34/pelican-mc-router:1.1.0 \
   -operation integrity -source /data/pelican-mc-router.db
 
 # Mount a separate writable, operator-protected backup directory for backup or
@@ -548,7 +556,7 @@ Update the pinned Pelican MC Router image in `.env` to the desired release. For
 example:
 
 ```dotenv
-PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.0.7
+PELICAN_MC_ROUTER_IMAGE=ghcr.io/zurco34/pelican-mc-router:1.1.0
 ```
 
 Change the tag to the exact release being installed.

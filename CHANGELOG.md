@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0 - 2026-08-11
+
+### Added
+
+- The operations dashboard now supports light and dark themes. When no explicit
+  preference has been stored, it follows the browser or operating-system color
+  scheme. An explicit choice is persisted locally in the browser.
+
+### Changed
+
+- Authorized `GET /` requests now return `307 Temporary Redirect` to
+  `/dashboard` under the existing management viewer authorization.
+- The stable OpenAPI document now includes the authenticated root redirect.
+
+### Upgrade notes
+
+- No database migration or configuration change is required. Existing OIDC
+  viewer/operator authorization and manual-reconciliation CSRF behavior are
+  unchanged.
+- Dashboard theme preference is browser-local presentation state stored in
+  `localStorage`; it is not sent to the service.
+- Back up the SQLite volume before upgrade. Migrations are forward-only; use a
+  verified pre-upgrade backup when a rollback requires an older binary.
+
 ## 1.0.7 - 2026-08-10
 
 ### Fixed

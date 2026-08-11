@@ -15,7 +15,7 @@ backend.
 - Optional Infrared configuration generation
 - Deterministic and convergent route reconciliation
 - Docker-first deployment model
-- REST API and a same-origin read-only operations dashboard
+- REST API and a same-origin operations dashboard with persistent light/dark theming
 
 ## Supported routing backends
 
@@ -118,9 +118,13 @@ Only one routing backend is active for a deployment.
 	sanitized error summary, and bounded route diagnostics (`desired`, `created`,
 	`updated`, `deleted`, and `changed`).
   It does not trigger discovery or backend work.
-- `GET /dashboard` renders the same cached operational state for browser use.
-  It is read-only, does not trigger reconciliation, and must be kept private or
-  behind authenticated reverse-proxy access control.
+- Authorized `GET /` requests return `307 Temporary Redirect` to `/dashboard`
+  under the same viewer authorization used by the management dashboard.
+- `GET /dashboard` renders cached operational state for browser use. Loading the
+  page does not itself trigger reconciliation and it must remain private or
+  behind authenticated reverse-proxy access control. The dashboard follows the
+  browser or operating-system light/dark preference by default; an explicit
+  choice is stored in browser `localStorage` and is not sent to the service.
   Verified OIDC authorization is required for normal management access after
   bootstrap; see [dashboard OIDC authorization](docs/adr/ADR-0006-dashboard-oidc-authorization.md).
 - `POST /api/v1/dashboard/reconcile` is available only with enabled dashboard
@@ -159,7 +163,7 @@ Versioned multi-platform container images are published to:
 ghcr.io/zurco34/pelican-mc-router
 ```
 
-For the pinned `v1.0.7` release configuration, create the environment file
+For the pinned `v1.1.0` release configuration, create the environment file
 and start the pinned production images after the image is published:
 
 ```bash
